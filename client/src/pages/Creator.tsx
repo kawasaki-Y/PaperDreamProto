@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, Save, Swords, PartyPopper, Plus, Trash2, Pencil, Printer, ImagePlus, RotateCcw } from "lucide-react";
 import { Link, useParams, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Header } from "@/components/Header";
 import { Card as UICard, CardContent } from "@/components/ui/card";
 import { motion } from "framer-motion";
@@ -210,67 +211,78 @@ function TCGEditor({ gameId, onBack }: { gameId: number; onBack: () => void }) {
       </header>
 
       <main className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        <div className="lg:col-span-3 space-y-6">
-          <div className="bg-card/50 backdrop-blur-xl border border-white/5 rounded-md p-6 shadow-xl">
-            <h2 className="text-xl font-['Orbitron'] mb-6 flex items-center gap-2">
-              <span className="w-1 h-6 bg-primary rounded-full"></span>
-              カード詳細
-            </h2>
-            <InputForm values={formData} onChange={setFormData} />
-          </div>
+        <div className="lg:col-span-4">
+          <div className="bg-card/50 backdrop-blur-xl border border-white/5 rounded-md p-4 shadow-xl">
+            <Tabs defaultValue="content">
+              <TabsList className="w-full">
+                <TabsTrigger value="content" className="flex-1">コンテンツ</TabsTrigger>
+                <TabsTrigger value="ai" className="flex-1">AI 分析</TabsTrigger>
+              </TabsList>
 
-          {existingCards && existingCards.length > 0 && (
-            <div className="bg-card/50 backdrop-blur-xl border border-white/5 rounded-md p-6 shadow-xl">
-              <h2 className="text-lg font-['Orbitron'] mb-4 flex items-center gap-2">
-                <span className="w-1 h-5 bg-accent rounded-full"></span>
-                保存済みカード ({existingCards.length})
-              </h2>
-              <div className="space-y-2">
-                {existingCards.map((card) => {
-                  const attrs = card.attributes as TCGAttributes | null;
-                  return (
-                    <div key={card.id} className="flex items-center justify-between gap-2 p-2 rounded-md bg-background/50">
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">{card.name}</p>
-                        {attrs && (
-                          <p className="text-xs text-muted-foreground">
-                            ATK {attrs.attack} / HP {attrs.hp}
-                          </p>
-                        )}
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleDeleteCard(card.id)}
-                        data-testid={`button-delete-card-${card.id}`}
-                      >
-                        <Trash2 className="w-3 h-3 text-destructive" />
-                      </Button>
+              <TabsContent value="content" className="space-y-6 pt-2">
+                <div>
+                  <h2 className="text-xl font-['Orbitron'] mb-6 flex items-center gap-2">
+                    <span className="w-1 h-6 bg-primary rounded-full"></span>
+                    カード詳細
+                  </h2>
+                  <InputForm values={formData} onChange={setFormData} />
+                </div>
+
+                {existingCards && existingCards.length > 0 && (
+                  <div>
+                    <h2 className="text-lg font-['Orbitron'] mb-4 flex items-center gap-2">
+                      <span className="w-1 h-5 bg-accent rounded-full"></span>
+                      保存済みカード ({existingCards.length})
+                    </h2>
+                    <div className="space-y-2">
+                      {existingCards.map((card) => {
+                        const attrs = card.attributes as TCGAttributes | null;
+                        return (
+                          <div key={card.id} className="flex items-center justify-between gap-2 p-2 rounded-md bg-background/50">
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium truncate">{card.name}</p>
+                              {attrs && (
+                                <p className="text-xs text-muted-foreground">
+                                  ATK {attrs.attack} / HP {attrs.hp}
+                                </p>
+                              )}
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDeleteCard(card.id)}
+                              data-testid={`button-delete-card-${card.id}`}
+                            >
+                              <Trash2 className="w-3 h-3 text-destructive" />
+                            </Button>
+                          </div>
+                        );
+                      })}
                     </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
+                  </div>
+                )}
+              </TabsContent>
+
+              <TabsContent value="ai">
+                <AIPanel
+                  onAnalyze={handleAnalyze}
+                  onApply={handleApplySuggestion}
+                  isAnalyzing={balanceCheckMutation.isPending}
+                  suggestion={suggestion}
+                  error={balanceCheckMutation.error?.message}
+                />
+              </TabsContent>
+            </Tabs>
+          </div>
         </div>
 
-        <div className="lg:col-span-5 flex flex-col items-center">
-          <div className="sticky top-8 w-full max-w-md">
+        <div className="lg:col-span-8 flex flex-col items-center">
+          <div className="sticky top-8 w-full">
             <div className="relative z-10">
               <CardPreview {...formData} isLoading={balanceCheckMutation.isPending} />
             </div>
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-primary/20 blur-[100px] rounded-full -z-10 pointer-events-none"></div>
           </div>
-        </div>
-
-        <div className="lg:col-span-4 h-[600px] sticky top-8">
-          <AIPanel
-            onAnalyze={handleAnalyze}
-            onApply={handleApplySuggestion}
-            isAnalyzing={balanceCheckMutation.isPending}
-            suggestion={suggestion}
-            error={balanceCheckMutation.error?.message}
-          />
         </div>
       </main>
     </div>
@@ -444,7 +456,7 @@ function PCGCardPreviewFull({
 
         {frontImageUrl && (
           <div className="px-4 pt-3">
-            <div className="w-full h-28 rounded-md overflow-hidden border border-white/10">
+            <div className="w-full h-44 rounded-md overflow-hidden border border-white/10">
               <img src={frontImageUrl} alt={name} className="w-full h-full object-cover" />
             </div>
           </div>
@@ -581,13 +593,12 @@ function EditableCardPreview({
         </div>
 
         <div
-          className="mx-4 mt-3 rounded-md overflow-hidden border border-white/10 cursor-pointer shrink-0"
-          style={{ height: frontImageUrl ? "auto" : "80px" }}
+          className="mx-4 mt-3 rounded-md overflow-hidden border border-white/10 cursor-pointer shrink-0 h-44"
           onClick={onImageClick}
           data-testid="preview-image-area"
         >
           {frontImageUrl ? (
-            <img src={frontImageUrl} alt={formData.name} className="w-full h-28 object-cover" />
+            <img src={frontImageUrl} alt={formData.name} className="w-full h-full object-cover" />
           ) : (
             <div className="w-full h-full flex items-center justify-center bg-white/10 text-white/50 gap-2">
               <ImagePlus className="w-4 h-4" />
@@ -1065,79 +1076,107 @@ function PCGCardEditor({ gameId, editCard, onBack }: {
       />
 
       <main className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        <div className="lg:col-span-4 space-y-6">
-          <div className="bg-card/50 backdrop-blur-xl border border-white/5 rounded-md p-6 shadow-xl space-y-4">
-            <h2 className="text-lg font-['Orbitron'] flex items-center gap-2">
-              <span className="w-1 h-5 bg-amber-500 rounded-full"></span>
-              クイック設定
-            </h2>
+        <div className="lg:col-span-4 space-y-4">
+          <div className="bg-card/50 backdrop-blur-xl border border-white/5 rounded-md p-4 shadow-xl">
+            <Tabs defaultValue="content">
+              <TabsList className="w-full">
+                <TabsTrigger value="content" className="flex-1">コンテンツ</TabsTrigger>
+                <TabsTrigger value="design" className="flex-1">デザイン</TabsTrigger>
+              </TabsList>
 
-            <div className="space-y-2">
-              <label className="text-sm text-muted-foreground flex items-center gap-2">カードタイプ</label>
-              <div className="grid grid-cols-3 gap-2">
-                {(["action", "event", "penalty"] as const).map((type) => (
-                  <Button
-                    key={type}
-                    data-testid={`button-pcg-type-${type}`}
-                    variant="outline"
-                    size="sm"
-                    onClick={() => updateField("type", type)}
-                    className={`toggle-elevate ${formData.type === type ? "toggle-elevated" : ""} text-xs`}
-                  >
-                    {type === "action" ? "アクション" : type === "event" ? "イベント" : "ペナルティ"}
-                  </Button>
-                ))}
-              </div>
-            </div>
+              <TabsContent value="content" className="space-y-4 pt-2">
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground flex items-center gap-2">
+                    カード名 <span className="text-red-400 text-xs">* 必須</span>
+                  </label>
+                  <input
+                    data-testid="input-pcg-card-name"
+                    value={formData.name}
+                    onChange={(e) => updateField("name", e.target.value)}
+                    placeholder="カード名を入力..."
+                    className="w-full bg-black/20 border border-border/50 rounded-md px-3 py-2 text-sm focus:border-amber-500/70 focus:outline-none transition-all placeholder:text-muted-foreground/50"
+                  />
+                </div>
 
-            <div className="space-y-2">
-              <label className="text-sm text-muted-foreground flex items-center gap-2">プレイ人数</label>
-              <input
-                data-testid="input-pcg-player-count"
-                value={formData.playerCount}
-                onChange={(e) => updateField("playerCount", e.target.value)}
-                placeholder="例: 2〜6人"
-                className="w-full bg-black/20 border border-border/50 rounded-md px-3 py-2 text-sm focus:border-primary focus:outline-none transition-all placeholder:text-muted-foreground/50"
-              />
-            </div>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground flex items-center gap-2">カードタイプ</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(["action", "event", "penalty"] as const).map((type) => (
+                      <Button
+                        key={type}
+                        data-testid={`button-pcg-type-${type}`}
+                        variant="outline"
+                        size="sm"
+                        onClick={() => updateField("type", type)}
+                        className={`toggle-elevate ${formData.type === type ? "toggle-elevated" : ""} text-xs`}
+                      >
+                        {type === "action" ? "アクション" : type === "event" ? "イベント" : "ペナルティ"}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
 
-            <div className="space-y-2">
-              <label className="text-sm text-muted-foreground flex items-center gap-2">難易度</label>
-              <div className="grid grid-cols-3 gap-1">
-                {(["easy", "normal", "hard"] as const).map((diff) => (
-                  <Button
-                    key={diff}
-                    data-testid={`button-pcg-difficulty-${diff}`}
-                    variant="outline"
-                    size="sm"
-                    onClick={() => updateField("difficulty", diff)}
-                    className={`toggle-elevate ${formData.difficulty === diff ? "toggle-elevated" : ""} text-xs`}
-                  >
-                    {diff === "easy" ? "かんたん" : diff === "normal" ? "ふつう" : "むずかしい"}
-                  </Button>
-                ))}
-              </div>
-            </div>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">アクション</label>
+                  <textarea
+                    value={formData.action}
+                    onChange={(e) => updateField("action", e.target.value)}
+                    placeholder="アクション内容を入力..."
+                    rows={3}
+                    className="w-full bg-black/20 border border-border/50 rounded-md px-3 py-2 text-sm focus:border-amber-500/70 focus:outline-none transition-all placeholder:text-muted-foreground/50 resize-none"
+                  />
+                </div>
 
-            <div className="space-y-2">
-              <label className="text-sm text-muted-foreground flex items-center gap-2">勝利条件</label>
-              <input
-                data-testid="input-pcg-win-condition"
-                value={formData.winCondition}
-                onChange={(e) => updateField("winCondition", e.target.value)}
-                placeholder="勝利条件を入力..."
-                className="w-full bg-black/20 border border-border/50 rounded-md px-3 py-2 text-sm focus:border-primary focus:outline-none transition-all placeholder:text-muted-foreground/50"
-              />
-            </div>
-          </div>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">効果テキスト</label>
+                  <textarea
+                    value={formData.effect}
+                    onChange={(e) => updateField("effect", e.target.value)}
+                    placeholder="効果テキストを入力..."
+                    rows={3}
+                    className="w-full bg-black/20 border border-border/50 rounded-md px-3 py-2 text-sm focus:border-amber-500/70 focus:outline-none transition-all placeholder:text-muted-foreground/50 resize-none"
+                  />
+                </div>
 
-          <div className="bg-card/50 backdrop-blur-xl border border-white/5 rounded-md p-6 shadow-xl space-y-4">
-            <h2 className="text-lg font-['Orbitron'] flex items-center gap-2">
-              <span className="w-1 h-5 bg-amber-500 rounded-full"></span>
-              {previewSide === "front" ? "表面" : "裏面"}画像
-            </h2>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground flex items-center gap-2">プレイ人数</label>
+                  <input
+                    data-testid="input-pcg-player-count"
+                    value={formData.playerCount}
+                    onChange={(e) => updateField("playerCount", e.target.value)}
+                    placeholder="例: 2〜6人"
+                    className="w-full bg-black/20 border border-border/50 rounded-md px-3 py-2 text-sm focus:border-primary focus:outline-none transition-all placeholder:text-muted-foreground/50"
+                  />
+                </div>
 
-            <div className="flex flex-col items-center">
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground flex items-center gap-2">難易度</label>
+                  <div className="grid grid-cols-3 gap-1">
+                    {(["easy", "normal", "hard"] as const).map((diff) => (
+                      <Button
+                        key={diff}
+                        data-testid={`button-pcg-difficulty-${diff}`}
+                        variant="outline"
+                        size="sm"
+                        onClick={() => updateField("difficulty", diff)}
+                        className={`toggle-elevate ${formData.difficulty === diff ? "toggle-elevated" : ""} text-xs`}
+                      >
+                        {diff === "easy" ? "かんたん" : diff === "normal" ? "ふつう" : "むずかしい"}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="design" className="space-y-6 pt-2">
+
+                <div className="space-y-4">
+                  <h3 className="text-sm font-['Orbitron'] flex items-center gap-2">
+                    <span className="w-1 h-4 bg-amber-500 rounded-full"></span>
+                    {previewSide === "front" ? "表面" : "裏面"}画像
+                  </h3>
+
+                  <div className="flex flex-col items-center">
               <div
                 className="aspect-[63/88] bg-muted/30 rounded-md overflow-hidden border-2 border-dashed border-border/50 cursor-pointer"
                 style={{ width: "160px" }}
@@ -1182,16 +1221,16 @@ function PCGCardEditor({ gameId, editCard, onBack }: {
                 )}
               </div>
             </div>
-          </div>
+                </div>
 
-          <div className="bg-card/50 backdrop-blur-xl border border-white/5 rounded-md p-6 shadow-xl space-y-4">
-            <h2 className="text-lg font-['Orbitron'] flex items-center gap-2">
-              <span className="w-1 h-5 bg-amber-500 rounded-full"></span>
-              レイアウト調整
-            </h2>
+                <div className="border-t border-border/30 pt-4 space-y-4">
+                  <h3 className="text-sm font-['Orbitron'] flex items-center gap-2">
+                    <span className="w-1 h-4 bg-amber-500 rounded-full"></span>
+                    レイアウト調整
+                  </h3>
 
-            <div className="space-y-2">
-              <label className="text-sm text-muted-foreground">テキストサイズ</label>
+                  <div className="space-y-2">
+                    <label className="text-sm text-muted-foreground">テキストサイズ</label>
               <div className="flex gap-2">
                 {(["xs", "small", "medium", "large"] as const).map((size) => (
                   <Button
@@ -1393,16 +1432,19 @@ function PCGCardEditor({ gameId, editCard, onBack }: {
               </div>
             </div>
 
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setDesign(defaultDesign)}
-              className="w-full"
-              data-testid="button-reset-design"
-            >
-              <RotateCcw className="w-3 h-3" />
-              デフォルトに戻す
-            </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setDesign(defaultDesign)}
+                    className="w-full"
+                    data-testid="button-reset-design"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    デフォルトに戻す
+                  </Button>
+                </div>
+              </TabsContent>
+            </Tabs>
           </div>
 
           <div className="flex flex-col gap-3">
@@ -1451,7 +1493,7 @@ function PCGCardEditor({ gameId, editCard, onBack }: {
               </div>
             </div>
 
-            <div className="relative max-w-md mx-auto">
+            <div className="relative w-full">
               <EditableCardPreview
                 formData={formData}
                 updateField={updateField}
