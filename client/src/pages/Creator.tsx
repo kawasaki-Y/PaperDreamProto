@@ -199,15 +199,20 @@ function TCGEditor({ gameId, onBack }: { gameId: number; onBack: () => void }) {
           </Button>
           <Header size="sm" />
         </div>
-        <Button
-          data-testid="button-save-card"
-          onClick={handleSave}
-          disabled={createCardMutation.isPending}
-          className="bg-green-600 text-white border-green-700"
-        >
-          <Save className="w-5 h-5" />
-          {createCardMutation.isPending ? "保存中..." : "カードを保存"}
-        </Button>
+        <div className="flex flex-col items-end gap-1">
+          {!formData.name.trim() && !createCardMutation.isPending && (
+            <p className="text-xs text-amber-400">カード名を入力してください</p>
+          )}
+          <Button
+            data-testid="button-save-card"
+            onClick={handleSave}
+            disabled={createCardMutation.isPending || !formData.name.trim()}
+            className="bg-green-600 text-white border-green-700"
+          >
+            <Save className="w-5 h-5" />
+            {createCardMutation.isPending ? "保存中..." : "カードを保存"}
+          </Button>
+        </div>
       </header>
 
       <main className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
@@ -286,11 +291,14 @@ function TCGEditor({ gameId, onBack }: { gameId: number; onBack: () => void }) {
         </div>
       </main>
 
-      <div className="flex justify-end mt-4">
+      <div className="flex flex-col items-end gap-1 mt-4">
+        {!formData.name.trim() && !createCardMutation.isPending && (
+          <p className="text-xs text-amber-400">カード名を入力してください</p>
+        )}
         <Button
           data-testid="button-save-card-bottom"
           onClick={handleSave}
-          disabled={createCardMutation.isPending}
+          disabled={createCardMutation.isPending || !formData.name.trim()}
           className="bg-green-600 text-white border-green-700"
         >
           <Save className="w-5 h-5" />
@@ -1054,19 +1062,24 @@ function PCGCardEditor({ gameId, editCard, onBack }: {
           </Button>
           <Header size="sm" />
         </div>
-        <div className="flex gap-3 flex-wrap">
+        <div className="flex gap-3 flex-wrap items-start">
           <Button variant="outline" onClick={onBack} data-testid="button-card-editor-cancel">
             キャンセル
           </Button>
-          <Button
-            data-testid="button-save-card"
-            onClick={handleSave}
-            disabled={isPending || !formData.name.trim()}
-            className="bg-green-600 text-white border-green-700"
-          >
-            <Save className="w-5 h-5" />
-            {isPending ? "保存中..." : "保存して戻る"}
-          </Button>
+          <div className="flex flex-col items-end gap-1">
+            {!formData.name.trim() && !isPending && (
+              <p className="text-xs text-amber-400">カード名を入力してください</p>
+            )}
+            <Button
+              data-testid="button-save-card"
+              onClick={handleSave}
+              disabled={isPending || !formData.name.trim()}
+              className="bg-green-600 text-white border-green-700"
+            >
+              <Save className="w-5 h-5" />
+              {isPending ? "保存中..." : "保存して戻る"}
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -1460,6 +1473,9 @@ function PCGCardEditor({ gameId, editCard, onBack }: {
           </div>
 
           <div className="flex flex-col gap-3">
+            {!formData.name.trim() && !isPending && (
+              <p className="text-xs text-amber-400 text-center">カード名を入力してください</p>
+            )}
             <Button
               data-testid="button-save-card-bottom"
               onClick={handleSave}
