@@ -1,0 +1,635 @@
+# Paper Dream - バグ修正 (3つの問題)
+
+現在のシステムに以下の3つの問題があります。修正してください。
+
+---
+
+## 修正1: 画像アップロード失敗の修正
+
+### 問題
+カードプレビュー画面で画像エリアをクリックして画像をアップロードしようとすると失敗する
+
+### 原因の可能性
+1. アップロードAPIのエラーハンドリング不足
+2. ファイルサイズ制限
+3. CORS設定の問題
+4. パスの問題
+
+### 修正内容
+
+#### アップロードAPIの強化
+`app/api/upload/route.ts`
+```typescript
+import { NextResponse } from 'next/server'
+import { writeFile, mkdir } from 'fs/promises'
+import { join } from 'path'
+import { existsSync } from 'fs'
+
+export async function POST(request: Request) {
+  try {
+    const formData = await request.formData()
+    const file = formData.get('file') as File
+    
+    if (!file) {
+      return NextResponse.json(
+        { error: 'ファイルが選択されていません' }, 
+        { status: 400 }
+      )
+    }
+    
+    // ファイルサイズチェック (10MB制限)
+    const maxSize = 10 * 1024 * 1024 // 10MB
+    if (file.size > maxSize) {
+      return NextResponse.json(
+        { error: 'ファイルサイズが大きすぎます (最大10MB)' }, 
+        { status: 400 }
+      )
+    }
+    
+    // ファイル形式チェック
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']
+    if (!allowedTypes.includes(file.type)) {
+      return NextResponse.json(
+        { error: '対応していないファイル形式です (JPEG, PNG, GIF, WebPのみ)' }, 
+        { status: 400 }
+      )
+    }
+    
+    const bytes = await file.arrayBuffer()
+    const buffer = Buffer.from(bytes)
+    
+    // uploadsディレクトリが存在しない場合は作成
+    const uploadDir = join(process.cwd(), 'public', 'uploads')
+    if (!existsSync(uploadDir)) {
+      await mkdir(uploadDir, { recursive: true })
+    }
+    
+    // ファイル名を生成 (タイムスタンプ + ランダム文字列)
+    const timestamp = Date.now()
+    const randomStr = Math.random().toString(36).substring(7)
+    const ext = file.name.split('.').pop()
+    const filename = `${timestamp}-${randomStr}.${ext}`
+    
+    const filepath = join(uploadDir, filename)
+    await writeFile(filepath, buffer)
+    
+    // URLを返す
+    const imageUrl = `/uploads/${filename}`
+    
+    console.log('✅ 画像アップロード成功:', imageUrl)
+    
+    return NextResponse.json({ 
+      success: true,
+      imageUrl,
+      filename,
+      size: file.size,
+      type: file.type
+    })
+    
+  } catch (error) {
+    console.error('❌ 画像アップロードエラー:', error)
+    return NextResponse.json(
+      { 
+        error: '画像のアップロードに失敗しました',
+        details: error instanceof Error ? error.message : '不明なエラー'
+      }, 
+      { status: 500 }
+    )
+  }
+}
+
+// GET: アップロード済み画像一覧を取得
+export async function GET() {
+  try {
+    const uploadDir = join(process.cwd(), 'public', 'uploads')
+    if (!existsSync(uploadDir)) {
+      return NextResponse.json({ images: [] })
+    }
+    
+    const { readdir } = await import('fs/promises')
+    const files = await readdir(uploadDir)
+    const images = files
+      .filter(file => /\.(jpg|jpeg|png|gif|webp)$/i.test(file))
+      .map(file => `/uploads/${file}`)
+    
+    return NextResponse.json({ images })
+  } catch (error) {
+    return NextResponse.json({ error: '画像一覧の取得に失敗しました' }, { status: 500 })
+  }
+}
+```
+
+#### クライアント側の画像アップロード処理
+```typescript
+const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const file = e.target.files?.[0]
+  if (!file) return
+  
+  // ローディング開始
+  setIsUploading(true)
+  
+  try {
+    const formData = new FormData()
+    formData.append('file', file)
+    
+    const response = await fetch('/api/upload', {
+      method: 'POST',
+      body: formData,
+    })
+    
+    const data = await response.json()
+    
+    if (!response.ok) {
+      throw new Error(data.error || '画像のアップロードに失敗しました')
+    }
+    
+    console.log('✅ アップロード成功:', data.imageUrl)
+    
+    // 画像URLを設定
+    if (viewSide === 'front') {
+      setFrontImageUrl(data.imageUrl)
+    } else {
+      setBackImageUrl(data.imageUrl)
+    }
+    
+    // 成功メッセージ表示
+    alert('画像をアップロードしました!')
+    
+  } catch (error) {
+    console.error('❌ アップロードエラー:', error)
+    alert(error instanceof Error ? error.message : '画像のアップロードに失敗しました')
+  } finally {
+    setIsUploading(false)
+  }
+}
+
+// 直接編集プレビューでの画像クリック処理
+const handleImageClick = () => {
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = 'image/*'
+  input.onchange = async (e) => {
+    const target = e.target as HTMLInputElement
+    const file = target.files?.[0]
+    if (!file) return
+    
+    setIsUploading(true)
+    
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      })
+      
+      const data = await response.json()
+      
+      if (!response.ok) {
+        throw new Error(data.error)
+      }
+      
+      // 画像URLを設定
+      updateCardData({ 
+        [viewSide === 'front' ? 'frontImageUrl' : 'backImageUrl']: data.imageUrl 
+      })
+      
+    } catch (error) {
+      alert(error instanceof Error ? error.message : '画像のアップロードに失敗しました')
+    } finally {
+      setIsUploading(false)
+    }
+  }
+  input.click()
+}
+```
+
+---
+
+## 修正2: ヘッダー・フッターのデザインコントロール
+
+### 現状
+- 背景色・テキスト色・フォント・テキストサイズのみ変更可能
+- ヘッダー(カード名エリア)とフッター(PARTY CARDエリア)のデザインが固定
+
+### 修正後
+レイアウト調整に以下を追加:
+```
+┌─────────────────────────────────────────┐
+│ レイアウト調整                           │
+├─────────────────────────────────────────┤
+│                                         │
+│ カード全体                               │
+│ - テキストサイズ: [極小][小][中][大]     │
+│ - 背景色: [カラーピッカー]               │
+│ - テキスト色: [カラーピッカー]           │
+│ - フォント: [ゴシック][明朝][丸][手書き] │
+│                                         │
+│ ヘッダーエリア(カード名)                 │
+│ - 背景色: [カラーピッカー]               │
+│ - テキスト色: [カラーピッカー]           │
+│ - 角丸: [なし][小][中][大]               │
+│                                         │
+│ フッターエリア(PARTY CARD)               │
+│ - 背景色: [カラーピッカー]               │
+│ - テキスト色: [カラーピッカー]           │
+│ - 表示/非表示: [✓ 表示する]             │
+│                                         │
+└─────────────────────────────────────────┘
+```
+
+### DB設計(attributesのlayoutに追加)
+```json
+{
+  "layout": {
+    // 既存
+    "textSize": "medium",
+    "backgroundColor": "#2563eb",
+    "fontFamily": "gothic",
+    "textColor": "#ffffff",
+    
+    // 新規追加
+    "header": {
+      "backgroundColor": "#1e40af",  // ヘッダー背景色
+      "textColor": "#ffffff",         // ヘッダーテキスト色
+      "borderRadius": "medium"        // 角丸 "none" | "small" | "medium" | "large"
+    },
+    "footer": {
+      "backgroundColor": "#1e3a8a",  // フッター背景色
+      "textColor": "#ffffff",         // フッターテキスト色
+      "visible": true                 // 表示/非表示
+    }
+  }
+}
+```
+
+### 実装
+```typescript
+// レイアウト設定State
+const [layout, setLayout] = useState({
+  textSize: 'medium',
+  backgroundColor: '#2563eb',
+  fontFamily: 'gothic',
+  textColor: '#ffffff',
+  header: {
+    backgroundColor: '#1e40af',
+    textColor: '#ffffff',
+    borderRadius: 'medium',
+  },
+  footer: {
+    backgroundColor: '#1e3a8a',
+    textColor: '#ffffff',
+    visible: true,
+  },
+})
+
+// ヘッダー設定UI
+<div className="space-y-2">
+  <h4 className="font-semibold">ヘッダーエリア(カード名)</h4>
+  
+  <div>
+    <label className="text-sm">背景色</label>
+    <input
+      type="color"
+      value={layout.header.backgroundColor}
+      onChange={(e) => setLayout({
+        ...layout,
+        header: { ...layout.header, backgroundColor: e.target.value }
+      })}
+      className="w-full h-10 rounded cursor-pointer"
+    />
+  </div>
+  
+  <div>
+    <label className="text-sm">テキスト色</label>
+    <input
+      type="color"
+      value={layout.header.textColor}
+      onChange={(e) => setLayout({
+        ...layout,
+        header: { ...layout.header, textColor: e.target.value }
+      })}
+      className="w-full h-10 rounded cursor-pointer"
+    />
+  </div>
+  
+  <div>
+    <label className="text-sm">角丸</label>
+    <div className="flex gap-2">
+      {['none', 'small', 'medium', 'large'].map(radius => (
+        <button
+          key={radius}
+          onClick={() => setLayout({
+            ...layout,
+            header: { ...layout.header, borderRadius: radius }
+          })}
+          className={`px-3 py-1 rounded ${
+            layout.header.borderRadius === radius 
+              ? 'bg-blue-600 text-white' 
+              : 'bg-gray-200'
+          }`}
+        >
+          {radius === 'none' ? 'なし' : radius === 'small' ? '小' : radius === 'medium' ? '中' : '大'}
+        </button>
+      ))}
+    </div>
+  </div>
+</div>
+
+// フッター設定UI
+<div className="space-y-2">
+  <h4 className="font-semibold">フッターエリア(PARTY CARD)</h4>
+  
+  <div className="flex items-center gap-2">
+    <input
+      type="checkbox"
+      checked={layout.footer.visible}
+      onChange={(e) => setLayout({
+        ...layout,
+        footer: { ...layout.footer, visible: e.target.checked }
+      })}
+      className="w-4 h-4"
+    />
+    <label className="text-sm">表示する</label>
+  </div>
+  
+  {layout.footer.visible && (
+    <>
+      <div>
+        <label className="text-sm">背景色</label>
+        <input
+          type="color"
+          value={layout.footer.backgroundColor}
+          onChange={(e) => setLayout({
+            ...layout,
+            footer: { ...layout.footer, backgroundColor: e.target.value }
+          })}
+          className="w-full h-10 rounded cursor-pointer"
+        />
+      </div>
+      
+      <div>
+        <label className="text-sm">テキスト色</label>
+        <input
+          type="color"
+          value={layout.footer.textColor}
+          onChange={(e) => setLayout({
+            ...layout,
+            footer: { ...layout.footer, textColor: e.target.value }
+          })}
+          className="w-full h-10 rounded cursor-pointer"
+        />
+      </div>
+    </>
+  )}
+</div>
+
+// プレビューに反映
+const getBorderRadius = (size: string) => {
+  const radiusMap = {
+    none: '0',
+    small: '4px',
+    medium: '8px',
+    large: '16px',
+  }
+  return radiusMap[size] || radiusMap.medium
+}
+
+// カードプレビューのヘッダー
+<div 
+  className="mb-2 p-2"
+  style={{
+    backgroundColor: layout.header.backgroundColor,
+    color: layout.header.textColor,
+    borderRadius: getBorderRadius(layout.header.borderRadius),
+  }}
+>
+  <h3 className="font-bold text-center" style={{ fontSize: textSizes.title }}>
+    {cardName || 'クリックしてカード名を編集'}
+  </h3>
+</div>
+
+// カードプレビューのフッター
+{layout.footer.visible && (
+  <div 
+    className="text-center text-xs mt-2 p-2 rounded"
+    style={{
+      backgroundColor: layout.footer.backgroundColor,
+      color: layout.footer.textColor,
+    }}
+  >
+    PARTY CARD
+  </div>
+)}
+```
+
+---
+
+## 修正3: 印刷プレビュー画面にレイアウトを反映【最重要】
+
+### 問題
+保存したカードデータのレイアウト設定(背景色・フォント・テキストサイズ等)が印刷プレビュー画面に反映されない
+
+### 原因
+印刷プレビュー画面でカードデータを読み込む際、`attributes.layout` を無視している
+
+### 修正内容
+
+#### カード保存時にlayoutをattributesに含める
+```typescript
+const saveCard = async () => {
+  const attributes = {
+    // パーティカードゲーム固有の情報
+    type: selectedCardType,
+    category: cardCategory,
+    action: actionContent,
+    effect: effectDescription,
+    winCondition: winCondition,
+    players: playerCount,
+    difficulty: selectedDifficulty,
+    
+    // レイアウト設定(重要!)
+    layout: layout,
+  }
+  
+  const response = await fetch('/api/cards', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      gameId: currentGameId,
+      name: cardName,
+      description: effectDescription,
+      frontImageUrl: frontImageUrl || null,
+      backImageUrl: backImageUrl || null,
+      attributes: attributes,
+    }),
+  })
+  
+  // ...
+}
+```
+
+#### 印刷プレビュー画面でlayoutを読み込んで適用
+`app/print-preview/page.tsx` (または該当ページ)
+```typescript
+'use client'
+
+import { useEffect, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
+
+export default function PrintPreviewPage() {
+  const searchParams = useSearchParams()
+  const gameId = searchParams.get('gameId')
+  
+  const [cards, setCards] = useState([])
+  const [selectedCards, setSelectedCards] = useState<string[]>([])
+  
+  useEffect(() => {
+    if (gameId) {
+      loadCards(gameId)
+    }
+  }, [gameId])
+  
+  const loadCards = async (gameId: string) => {
+    const response = await fetch(`/api/cards?gameId=${gameId}`)
+    const data = await response.json()
+    
+    // カードデータからレイアウト情報を含めて解析
+    const parsedCards = data.map((card: any) => ({
+      id: card.id,
+      name: card.name,
+      frontImageUrl: card.frontImageUrl,
+      backImageUrl: card.backImageUrl,
+      attributes: card.attributes,
+      // レイアウト情報を抽出(重要!)
+      layout: card.attributes?.layout || getDefaultLayout(),
+    }))
+    
+    setCards(parsedCards)
+    console.log('📄 読み込んだカード:', parsedCards)
+  }
+  
+  const getDefaultLayout = () => ({
+    textSize: 'medium',
+    backgroundColor: '#2563eb',
+    fontFamily: 'gothic',
+    textColor: '#ffffff',
+    header: {
+      backgroundColor: '#1e40af',
+      textColor: '#ffffff',
+      borderRadius: 'medium',
+    },
+    footer: {
+      backgroundColor: '#1e3a8a',
+      textColor: '#ffffff',
+      visible: true,
+    },
+  })
+  
+  return (
+    <div>
+      <h1>印刷プレビュー</h1>
+      
+      <div className="grid grid-cols-3 gap-4">
+        {cards.map((card: any) => (
+          <PrintableCard 
+            key={card.id}
+            card={card}
+            layout={card.layout} // レイアウトを渡す(重要!)
+            isSelected={selectedCards.includes(card.id)}
+            onSelect={() => toggleCardSelection(card.id)}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// 印刷用カードコンポーネント
+const PrintableCard = ({ card, layout, isSelected, onSelect }) => {
+  return (
+    <div 
+      className="cursor-pointer border-2 rounded-lg overflow-hidden"
+      style={{
+        borderColor: isSelected ? '#2563eb' : '#e5e7eb',
+      }}
+      onClick={onSelect}
+    >
+      <div 
+        className="aspect-[63/88] p-4"
+        style={{
+          backgroundColor: layout.backgroundColor,
+          color: layout.textColor,
+          fontFamily: getFontFamily(layout.fontFamily),
+        }}
+      >
+        {/* ヘッダー */}
+        <div 
+          className="mb-2 p-2"
+          style={{
+            backgroundColor: layout.header.backgroundColor,
+            color: layout.header.textColor,
+            borderRadius: getBorderRadius(layout.header.borderRadius),
+          }}
+        >
+          <h3 className="font-bold text-center" style={{ fontSize: getTextSize(layout.textSize).title }}>
+            {card.name}
+          </h3>
+        </div>
+        
+        {/* 画像 */}
+        {card.frontImageUrl && (
+          <img 
+            src={card.frontImageUrl} 
+            alt={card.name}
+            className="w-full object-cover rounded mb-2"
+          />
+        )}
+        
+        {/* コンテンツ */}
+        <div style={{ fontSize: getTextSize(layout.textSize).body }}>
+          <div className="mb-1">
+            <div className="font-semibold">アクション</div>
+            <div>{card.attributes?.action}</div>
+          </div>
+          <div>
+            <div className="font-semibold">効果</div>
+            <div>{card.attributes?.effect}</div>
+          </div>
+        </div>
+        
+        {/* フッター */}
+        {layout.footer.visible && (
+          <div 
+            className="text-center text-xs mt-2 p-1 rounded"
+            style={{
+              backgroundColor: layout.footer.backgroundColor,
+              color: layout.footer.textColor,
+            }}
+          >
+            PARTY CARD
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+```
+
+---
+
+## 実装優先順位
+
+1. **修正3: 印刷プレビューへのレイアウト反映** (30分) ← **最重要**
+2. **修正1: 画像アップロード修正** (20分)
+3. **修正2: ヘッダー・フッターデザイン** (30分)
+
+**合計: 1時間20分**
+
+---
+
+この3つの修正を実装してください。
+特に「修正3: 印刷プレビューへのレイアウト反映」は**最優先**で対応してください。
+
+実装完了したら、動作確認します。

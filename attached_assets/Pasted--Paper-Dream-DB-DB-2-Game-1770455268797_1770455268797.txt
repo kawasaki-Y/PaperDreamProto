@@ -1,0 +1,622 @@
+# Paper Dream - DB設計と実装
+
+修正お疲れ様でした。次に、データベースを実装します。
+
+---
+
+## DB設計方針
+
+### 基本思想
+- **シンプルな2テーブル構成: Game + Card**
+- **ゲームごとの差異は attributes (JSON) で柔軟に対応**
+- **1つのGameに複数のCardが紐づく(1:N)**
+
+この設計により:
+- トレーディングカードゲーム
+- パーティカードゲーム
+- 恋愛クラっとカードゲーム(今回の試作品)
+- その他あらゆるカードゲーム
+
+すべてを同じDB構造で管理できます。
+
+---
+
+## テーブル設計
+```
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃                   Game                       ┃
+┃              (ゲーム情報)                    ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+┌────────────────┬──────────┬──────┬─────────┐
+│ フィールド     │ 型       │ 必須 │ 説明    │
+├────────────────┼──────────┼──────┼─────────┤
+│ 🔑 id          │ String   │ ✓   │ UUID    │
+│ title          │ String   │ ✓   │ ゲーム名│
+│ description    │ String?  │      │ 説明    │
+│ createdAt      │ DateTime │ ✓   │ 作成日時│
+│ updatedAt      │ DateTime │ ✓   │ 更新日時│
+└────────────────┴──────────┴──────┴─────────┘
+                      │
+                      │ 1
+                      │
+                      │ リレーション
+                      │ onDelete: CASCADE
+                      │
+                      │ N
+                      ▼
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃                   Card                       ┃
+┃              (カード情報)                    ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+┌────────────────┬──────────┬──────┬─────────────┐
+│ フィールド     │ 型       │ 必須 │ 説明        │
+├────────────────┼──────────┼──────┼─────────────┤
+│ 🔑 id          │ String   │ ✓   │ UUID        │
+│ 🔗 gameId      │ String   │ ✓   │ 外部キー    │
+│ name           │ String   │ ✓   │ カード名    │
+│ imageUrl       │ String   │ ✓   │ 画像URL     │
+│ width          │ Float?   │      │ 幅(mm) 63   │
+│ height         │ Float?   │      │ 高さ(mm) 88 │
+│ order          │ Int      │      │ 並び順 0    │
+│ description    │ String?  │      │ 説明        │
+│ attributes     │ Json?    │      │ タグ(JSON)  │
+│ createdAt      │ DateTime │ ✓   │ 作成日時    │
+│ updatedAt      │ DateTime │ ✓   │ 更新日時    │
+└────────────────┴──────────┴──────┴─────────────┘
+┌────────────────────────────────────────────────┐
+│ 📊 インデックス                                │
+│ - gameId (B-tree)                              │
+│ - order (B-tree)                               │
+└────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────┐
+│ 🔗 外部キー制約                                │
+│ - gameId → Game.id                             │
+│ - 削除時: CASCADE (親削除で子も削除)           │
+└────────────────────────────────────────────────┘
+```
+
+---
+
+## attributes (JSON) の設計例
+
+### トレーディングカードゲーム (TCG)
+```json
+{
+  "type": "monster",
+  "attack": 6,
+  "hp": 5,
+  "effect": "相手のHPを2減らす",
+  "rarity": "rare"
+}
+```
+
+### パーティカードゲーム (PCG)
+```json
+{
+  "type": "action",
+  "category": "penalty",
+  "action": "全員1回休み",
+  "difficulty": 3,
+  "players": "2-6"
+}
+```
+
+### 恋愛クラっとカードゲーム(今回の試作品)
+
+#### シチュエーションカード
+```json
+{
+  "type": "situation",
+  "mood": "romantic",
+  "weather": "rain_after",
+  "location": "park",
+  "emotion_score": 8
+}
+```
+
+#### セリフカード
+```json
+{
+  "type": "words",
+  "category": "confession",
+  "emotion": "love",
+  "intensity": 10,
+  "timing": "climax"
+}
+```
+
+#### ムードカード
+```json
+{
+  "type": "mood",
+  "effect": "romantic",
+  "season": "spring",
+  "visual": "pink",
+  "emotion_boost": 2
+}
+```
+
+---
+
+## Prismaスキーマ実装
+
+### ファイル: `prisma/schema.prisma`
+
+**この設計図の通りに実装してください:**
+```prisma
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Game {
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  cards       Card[]
+}
+
+model Card {
+  id          String   @id @default(uuid())
+  gameId      String
+  name        String
+  imageUrl    String
+  width       Float?   @default(63)
+  height      Float?   @default(88)
+  order       Int      @default(0)
+  description String?
+  attributes  Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  game        Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  
+  @@index([gameId])
+  @@index([order])
+}
+```
+
+**重要:**
+- この設計図を一字一句そのまま実装してください
+- フィールドの追加・削除は行わないでください
+- デフォルト値も設計図の通りに設定してください
+
+---
+
+## 実装手順
+
+### 1. PostgreSQL準備
+
+REPLITで利用可能なPostgreSQLを使用します。
+以下のいずれかを選択:
+
+**オプションA: REPLIT内蔵のPostgreSQL**
+- REPLITのSecrets機能で `DATABASE_URL` を設定
+
+**オプションB: 外部サービス(推奨)**
+- Supabase: https://supabase.com (無料枠あり)
+- Neon.tech: https://neon.tech (無料枠あり)
+
+### 2. Prismaセットアップ
+```bash
+# 依存関係のインストール
+npm install prisma @prisma/client
+
+# Prisma初期化
+npx prisma init
+
+# 上記のschema.prismaを作成
+
+# マイグレーション実行(DBテーブル作成)
+npx prisma migrate dev --name init
+
+# Prisma Clientを生成
+npx prisma generate
+```
+
+### 3. 環境変数設定
+
+`.env` ファイルに以下を追加:
+```
+DATABASE_URL="postgresql://username:password@host:port/database"
+```
+
+### 4. API実装
+
+#### 4-1. ゲーム作成・取得API
+
+`app/api/games/route.ts`
+```typescript
+import { NextResponse } from 'next/server'
+import { PrismaClient } from '@prisma/client'
+
+const prisma = new PrismaClient()
+
+// ゲーム作成
+export async function POST(request: Request) {
+  try {
+    const { title, description } = await request.json()
+    
+    const game = await prisma.game.create({
+      data: {
+        title,
+        description: description || null,
+      },
+    })
+    
+    return NextResponse.json(game)
+  } catch (error) {
+    return NextResponse.json({ error: 'ゲームの作成に失敗しました' }, { status: 500 })
+  }
+}
+
+// ゲーム一覧取得
+export async function GET() {
+  try {
+    const games = await prisma.game.findMany({
+      include: {
+        cards: true,
+      },
+      orderBy: {
+        updatedAt: 'desc',
+      },
+    })
+    
+    return NextResponse.json(games)
+  } catch (error) {
+    return NextResponse.json({ error: 'ゲーム一覧の取得に失敗しました' }, { status: 500 })
+  }
+}
+```
+
+#### 4-2. 特定ゲーム取得・更新・削除API
+
+`app/api/games/[id]/route.ts`
+```typescript
+import { NextResponse } from 'next/server'
+import { PrismaClient } from '@prisma/client'
+
+const prisma = new PrismaClient()
+
+// 特定ゲーム取得
+export async function GET(
+  request: Request,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const game = await prisma.game.findUnique({
+      where: { id: params.id },
+      include: {
+        cards: {
+          orderBy: { order: 'asc' },
+        },
+      },
+    })
+    
+    if (!game) {
+      return NextResponse.json({ error: 'ゲームが見つかりません' }, { status: 404 })
+    }
+    
+    return NextResponse.json(game)
+  } catch (error) {
+    return NextResponse.json({ error: 'ゲームの取得に失敗しました' }, { status: 500 })
+  }
+}
+
+// ゲーム更新
+export async function PUT(
+  request: Request,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const { title, description } = await request.json()
+    
+    const game = await prisma.game.update({
+      where: { id: params.id },
+      data: {
+        title,
+        description,
+      },
+    })
+    
+    return NextResponse.json(game)
+  } catch (error) {
+    return NextResponse.json({ error: 'ゲームの更新に失敗しました' }, { status: 500 })
+  }
+}
+
+// ゲーム削除(カードも自動削除: CASCADE)
+export async function DELETE(
+  request: Request,
+  { params }: { params: { id: string } }
+) {
+  try {
+    await prisma.game.delete({
+      where: { id: params.id },
+    })
+    
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    return NextResponse.json({ error: 'ゲームの削除に失敗しました' }, { status: 500 })
+  }
+}
+```
+
+#### 4-3. カード作成・取得API
+
+`app/api/cards/route.ts`
+```typescript
+import { NextResponse } from 'next/server'
+import { PrismaClient } from '@prisma/client'
+
+const prisma = new PrismaClient()
+
+// カード作成
+export async function POST(request: Request) {
+  try {
+    const { gameId, name, imageUrl, description, attributes, order } = await request.json()
+    
+    const card = await prisma.card.create({
+      data: {
+        gameId,
+        name,
+        imageUrl,
+        description: description || null,
+        attributes: attributes || null,
+        order: order || 0,
+      },
+    })
+    
+    return NextResponse.json(card)
+  } catch (error) {
+    return NextResponse.json({ error: 'カードの作成に失敗しました' }, { status: 500 })
+  }
+}
+
+// カード一覧取得(ゲームIDでフィルタ可能)
+export async function GET(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url)
+    const gameId = searchParams.get('gameId')
+    
+    const cards = await prisma.card.findMany({
+      where: gameId ? { gameId } : undefined,
+      orderBy: {
+        order: 'asc',
+      },
+    })
+    
+    return NextResponse.json(cards)
+  } catch (error) {
+    return NextResponse.json({ error: 'カード一覧の取得に失敗しました' }, { status: 500 })
+  }
+}
+```
+
+#### 4-4. 特定カード更新・削除API
+
+`app/api/cards/[id]/route.ts`
+```typescript
+import { NextResponse } from 'next/server'
+import { PrismaClient } from '@prisma/client'
+
+const prisma = new PrismaClient()
+
+// カード更新
+export async function PUT(
+  request: Request,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const { name, imageUrl, description, attributes, order } = await request.json()
+    
+    const card = await prisma.card.update({
+      where: { id: params.id },
+      data: {
+        name,
+        imageUrl,
+        description,
+        attributes,
+        order,
+      },
+    })
+    
+    return NextResponse.json(card)
+  } catch (error) {
+    return NextResponse.json({ error: 'カードの更新に失敗しました' }, { status: 500 })
+  }
+}
+
+// カード削除
+export async function DELETE(
+  request: Request,
+  { params }: { params: { id: string } }
+) {
+  try {
+    await prisma.card.delete({
+      where: { id: params.id },
+    })
+    
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    return NextResponse.json({ error: 'カードの削除に失敗しました' }, { status: 500 })
+  }
+}
+```
+
+---
+
+## UIとの連携
+
+### MY COLLECTION の実装
+
+トップ画面のMY COLLECTIONで、DBから取得したゲーム一覧を表示:
+```typescript
+'use client'
+
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+
+interface Game {
+  id: string
+  title: string
+  description: string | null
+  cards: any[]
+  updatedAt: string
+}
+
+export function MyCollection() {
+  const [games, setGames] = useState<Game[]>([])
+  const [loading, setLoading] = useState(true)
+  const router = useRouter()
+  
+  useEffect(() => {
+    fetchGames()
+  }, [])
+  
+  const fetchGames = async () => {
+    try {
+      const response = await fetch('/api/games')
+      const data = await response.json()
+      setGames(data)
+    } catch (error) {
+      console.error('ゲーム一覧の取得に失敗:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+  
+  const editGame = (gameId: string) => {
+    router.push(`/deckbuilding?gameId=${gameId}`)
+  }
+  
+  const deleteGame = async (gameId: string) => {
+    if (!confirm('本当に削除しますか?')) return
+    
+    try {
+      await fetch(`/api/games/${gameId}`, { method: 'DELETE' })
+      fetchGames() // 再取得
+    } catch (error) {
+      console.error('ゲームの削除に失敗:', error)
+    }
+  }
+  
+  if (loading) return <div>読み込み中...</div>
+  if (games.length === 0) return <div>まだゲームがありません</div>
+  
+  return (
+    <div className="space-y-4">
+      <h2 className="text-2xl font-bold">MY COLLECTION</h2>
+      <p className="text-gray-600">保存済みのカードゲームを編集できます</p>
+      
+      <div className="grid gap-4">
+        {games.map(game => (
+          <div key={game.id} className="border rounded-lg p-4 hover:shadow-lg transition">
+            <h3 className="text-xl font-semibold">{game.title}</h3>
+            {game.description && (
+              <p className="text-gray-600 mt-2">{game.description}</p>
+            )}
+            <div className="flex justify-between items-center mt-4">
+              <span className="text-sm text-gray-500">
+                カード数: {game.cards.length}枚 | 
+                最終更新: {new Date(game.updatedAt).toLocaleDateString('ja-JP')}
+              </span>
+              <div className="space-x-2">
+                <button
+                  onClick={() => editGame(game.id)}
+                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                >
+                  続きを編集
+                </button>
+                <button
+                  onClick={() => deleteGame(game.id)}
+                  className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+                >
+                  削除
+                </button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+```
+
+### 創作画面でのデータ保存
+```typescript
+// 新規ゲーム作成
+const createNewGame = async () => {
+  const response = await fetch('/api/games', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      title: '新しいカードゲーム',
+      description: '',
+    }),
+  })
+  const game = await response.json()
+  return game.id
+}
+
+// カード保存
+const saveCard = async (cardData: any) => {
+  const response = await fetch('/api/cards', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      gameId: currentGameId,
+      name: cardData.name,
+      imageUrl: cardData.imageUrl || '',
+      description: cardData.description,
+      attributes: cardData.attributes,
+    }),
+  })
+  return response.json()
+}
+```
+
+---
+
+## 完成イメージ
+
+1. ユーザーが「創作」をクリック
+2. 新規ゲームがDBに作成される(Game テーブル)
+3. カードを作成 → DBに保存(Card テーブル)
+4. トップに戻る → MY COLLECTIONにゲームが表示
+5. 「続きを編集」クリック → DBからゲーム+カードデータを読み込み
+6. カードを追加・編集 → DBに保存
+7. ゲーム削除 → CASCADEでカードも自動削除
+
+---
+
+## 実装優先順位
+
+1. **Prismaセットアップ** (30分)
+   - schema.prisma作成
+   - migrate実行
+   - Prisma Client生成
+
+2. **ゲームAPI実装** (30分)
+   - POST /api/games
+   - GET /api/games
+   - GET /api/games/[id]
+
+3. **カードAPI実装** (30分)
+   - POST /api/cards
+   - GET /api/cards?gameId=xxx
+
+4. **MY COLLECTION連携** (30分)
+   - ゲーム一覧表示
+   - 続きを編集機能
+   - 削除機能
+
+**合計: 2時間**
+
+このDB実装を完了させてください。

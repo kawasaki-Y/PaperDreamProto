@@ -1,0 +1,422 @@
+# Paper Dream - UI改善 (4つの修正)
+
+現在の実装に以下の4つの改善を加えてください。
+
+---
+
+## 修正1: MY COLLECTION の開閉式実装
+
+### 現状
+- トップ画面でMY COLLECTIONが常に展開されている
+- スクロールが長くなる
+
+### 修正後
+```
+┌─────────────────────────────────────────┐
+│ MY COLLECTION            [▼ 展開する]    │
+│ 保存済みのカードゲームを編集できます     │
+└─────────────────────────────────────────┘
+
+↓ クリックすると
+
+┌─────────────────────────────────────────┐
+│ MY COLLECTION            [▲ 閉じる]      │
+│ 保存済みのカードゲームを編集できます     │
+├─────────────────────────────────────────┤
+│ ┌─────────────────────────────────┐   │
+│ │ 🎴 恋愛カードゲーム               │   │
+│ │ 恋愛コミュニケーションを...       │   │
+│ │ カード数: 0枚 | 更新: 2026/2/7   │   │
+│ │           [続きを編集] [削除]     │   │
+│ └─────────────────────────────────┘   │
+│ ┌─────────────────────────────────┐   │
+│ │ 🎮 新しいPCGゲーム               │   │
+│ │ パーティカードゲーム             │   │
+│ │ カード数: 0枚 | 更新: 2026/2/7   │   │
+│ │           [続きを編集] [削除]     │   │
+│ └─────────────────────────────────┘   │
+└─────────────────────────────────────────┘
+```
+
+### 実装
+```typescript
+const [isCollectionOpen, setIsCollectionOpen] = useState(false)
+
+<div className="border rounded-lg p-6">
+  <div 
+    className="flex justify-between items-center cursor-pointer"
+    onClick={() => setIsCollectionOpen(!isCollectionOpen)}
+  >
+    <div>
+      <h2 className="text-2xl font-bold">MY COLLECTION</h2>
+      <p className="text-gray-600">保存済みのカードゲームを編集できます</p>
+    </div>
+    <button className="text-xl">
+      {isCollectionOpen ? '▲ 閉じる' : '▼ 展開する'}
+    </button>
+  </div>
+  
+  {isCollectionOpen && (
+    <div className="mt-6 space-y-4">
+      {games.map(game => (
+        // ゲーム一覧表示
+      ))}
+    </div>
+  )}
+</div>
+```
+
+---
+
+## 修正2: カード一覧をアイコン風(サムネイル)表示
+
+### 現状
+- 「作成済みカード一覧 (0枚)」と文字だけ表示
+
+### 修正後
+```
+┌─────────────────────────────────────────────────────────┐
+│ 恋愛カードゲーム                                         │
+│ 恋愛コミュニケーションを勉強できるゲーム                 │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│ 作成済みカード一覧 (3枚)               [+ 新規カード]    │
+│                                                         │
+│ ┌────────┐ ┌────────┐ ┌────────┐                     │
+│ │        │ │        │ │        │                     │
+│ │ [画像] │ │ [画像] │ │ [画像] │                     │
+│ │        │ │        │ │        │                     │
+│ │リバース│ │スキップ│ │ドロー2 │                     │
+│ │        │ │        │ │        │                     │
+│ │ [編集] │ │ [編集] │ │ [編集] │                     │
+│ └────────┘ └────────┘ └────────┘                     │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+```
+
+### 実装
+```typescript
+<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+  {cards.map(card => (
+    <div 
+      key={card.id} 
+      className="border rounded-lg p-2 hover:shadow-lg transition cursor-pointer"
+      onClick={() => editCard(card.id)}
+    >
+      {/* カード画像サムネイル */}
+      <div className="aspect-[63/88] bg-gray-200 rounded mb-2 overflow-hidden">
+        {card.frontImageUrl ? (
+          <img 
+            src={card.frontImageUrl} 
+            alt={card.name}
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center text-gray-400">
+            No Image
+          </div>
+        )}
+      </div>
+      
+      {/* カード名 */}
+      <p className="text-sm font-semibold text-center truncate">
+        {card.name}
+      </p>
+      
+      {/* 編集ボタン */}
+      <button className="w-full mt-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700">
+        編集
+      </button>
+    </div>
+  ))}
+</div>
+```
+
+---
+
+## 修正3: カード画像を表面・裏面の両方登録
+
+### 現状
+- カード画像が1枚だけ
+
+### 修正後
+
+#### UI構成
+```
+┌─────────────────────────────────────────┐
+│ カードプレビュー                         │
+├─────────────────────────────────────────┤
+│                                         │
+│ 表示: [● 表面] [○ 裏面]                 │
+│                                         │
+│ ┌───────────────────────────────┐     │
+│ │  リバースカード                 │     │
+│ │                                 │     │
+│ │  [表面画像エリア]               │     │
+│ │  ┌─────────────────────┐     │     │
+│ │  │                         │     │     │
+│ │  │   [画像をアップロード]   │     │     │
+│ │  │                         │     │     │
+│ │  └─────────────────────┘     │     │
+│ │                                 │     │
+│ │  アクション: 手札を全て公開...   │     │
+│ └───────────────────────────────┘     │
+│                                         │
+└─────────────────────────────────────────┘
+
+↓ 裏面に切り替え
+
+┌─────────────────────────────────────────┐
+│ カードプレビュー                         │
+├─────────────────────────────────────────┤
+│                                         │
+│ 表示: [○ 表面] [● 裏面]                 │
+│                                         │
+│ ┌───────────────────────────────┐     │
+│ │                                 │     │
+│ │  [裏面画像エリア]               │     │
+│ │  ┌─────────────────────┐     │     │
+│ │  │                         │     │     │
+│ │  │   [画像をアップロード]   │     │     │
+│ │  │                         │     │     │
+│ │  └─────────────────────┘     │     │
+│ │                                 │     │
+│ │      PARTY CARD                 │     │
+│ │      PAPER DREAM                │     │
+│ └───────────────────────────────┘     │
+│                                         │
+└─────────────────────────────────────────┘
+```
+
+#### DB設計(Card テーブルに追加)
+```prisma
+model Card {
+  // ... 既存フィールド
+  imageUrl       String?  // → frontImageUrl に改名
+  frontImageUrl  String?  // 表面画像URL
+  backImageUrl   String?  // 裏面画像URL
+  // ...
+}
+```
+
+#### 実装
+```typescript
+const [viewSide, setViewSide] = useState<'front' | 'back'>('front')
+const [frontImageUrl, setFrontImageUrl] = useState('')
+const [backImageUrl, setBackImageUrl] = useState('')
+
+// 表面・裏面切り替えUI
+<div className="flex gap-4 mb-4">
+  <button
+    onClick={() => setViewSide('front')}
+    className={`px-4 py-2 rounded ${
+      viewSide === 'front' 
+        ? 'bg-blue-600 text-white' 
+        : 'bg-gray-200'
+    }`}
+  >
+    ● 表面
+  </button>
+  <button
+    onClick={() => setViewSide('back')}
+    className={`px-4 py-2 rounded ${
+      viewSide === 'back' 
+        ? 'bg-blue-600 text-white' 
+        : 'bg-gray-200'
+    }`}
+  >
+    ○ 裏面
+  </button>
+</div>
+
+// 画像アップロード(表面・裏面別々)
+{viewSide === 'front' ? (
+  <ImageUpload 
+    imageUrl={frontImageUrl}
+    onUpload={setFrontImageUrl}
+    label="表面画像"
+  />
+) : (
+  <ImageUpload 
+    imageUrl={backImageUrl}
+    onUpload={setBackImageUrl}
+    label="裏面画像"
+  />
+)}
+
+// DB保存時
+const saveCard = async () => {
+  await fetch('/api/cards', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      // ...
+      frontImageUrl: frontImageUrl,
+      backImageUrl: backImageUrl,
+      // ...
+    }),
+  })
+}
+```
+
+---
+
+## 修正4: 背景色・フォント・テキストサイズのカスタマイズ
+
+### 現状
+- テキストサイズ: 小/中/大 の3択のみ
+- 背景色: デフォルト/ダーク の2択のみ
+
+### 修正後
+```
+┌─────────────────────────────────────────┐
+│ レイアウト調整                           │
+├─────────────────────────────────────────┤
+│                                         │
+│ テキストサイズ                           │
+│ ┌─────┐┌─────┐┌─────┐┌─────┐       │
+│ │ 極小 ││  小  ││  中  ││  大  │       │
+│ └─────┘└─────┘└─────┘└─────┘       │
+│                                         │
+│ 背景色                                   │
+│ ┌─────────────────────────────────┐   │
+│ │ 色を選択: [カラーピッカー]        │   │
+│ └─────────────────────────────────┘   │
+│ プリセット:                             │
+│ [⚪白] [⚫黒] [🔵青] [🔴赤] [🟢緑]      │
+│                                         │
+│ フォント                                 │
+│ ┌─────────────────────────────────┐   │
+│ │ [▼ フォントを選択]               │   │
+│ │   - ゴシック体                   │   │
+│ │   - 明朝体                       │   │
+│ │   - 丸ゴシック                   │   │
+│ │   - 手書き風                     │   │
+│ └─────────────────────────────────┘   │
+│                                         │
+│ カードテキスト色                         │
+│ ┌─────────────────────────────────┐   │
+│ │ 色を選択: [カラーピッカー]        │   │
+│ └─────────────────────────────────┘   │
+│ プリセット:                             │
+│ [⚪白] [⚫黒] [🔵青] [🔴赤] [🟢緑]      │
+│                                         │
+└─────────────────────────────────────────┘
+```
+
+### DB設計(Card テーブルの attributes に追加)
+```json
+{
+  // 既存のattributes
+  "type": "action",
+  "category": "penalty",
+  // ...
+  
+  // レイアウト設定(新規追加)
+  "layout": {
+    "textSize": "medium",        // "xs" | "small" | "medium" | "large"
+    "backgroundColor": "#2563eb", // HEX color
+    "fontFamily": "gothic",       // "gothic" | "mincho" | "rounded" | "handwriting"
+    "textColor": "#ffffff"        // HEX color
+  }
+}
+```
+
+### 実装
+```typescript
+const [layout, setLayout] = useState({
+  textSize: 'medium',
+  backgroundColor: '#2563eb',
+  fontFamily: 'gothic',
+  textColor: '#ffffff',
+})
+
+// テキストサイズ選択
+<div className="flex gap-2">
+  {['xs', 'small', 'medium', 'large'].map(size => (
+    <button
+      key={size}
+      onClick={() => setLayout({...layout, textSize: size})}
+      className={`px-4 py-2 rounded ${
+        layout.textSize === size ? 'bg-blue-600 text-white' : 'bg-gray-200'
+      }`}
+    >
+      {size === 'xs' ? '極小' : size === 'small' ? '小' : size === 'medium' ? '中' : '大'}
+    </button>
+  ))}
+</div>
+
+// 背景色カラーピッカー
+<div>
+  <label>背景色</label>
+  <input
+    type="color"
+    value={layout.backgroundColor}
+    onChange={(e) => setLayout({...layout, backgroundColor: e.target.value})}
+    className="w-full h-12 rounded cursor-pointer"
+  />
+  {/* プリセット */}
+  <div className="flex gap-2 mt-2">
+    {['#ffffff', '#000000', '#2563eb', '#dc2626', '#16a34a'].map(color => (
+      <button
+        key={color}
+        onClick={() => setLayout({...layout, backgroundColor: color})}
+        className="w-8 h-8 rounded border"
+        style={{ backgroundColor: color }}
+      />
+    ))}
+  </div>
+</div>
+
+// フォント選択
+<select
+  value={layout.fontFamily}
+  onChange={(e) => setLayout({...layout, fontFamily: e.target.value})}
+  className="w-full p-2 border rounded"
+>
+  <option value="gothic">ゴシック体</option>
+  <option value="mincho">明朝体</option>
+  <option value="rounded">丸ゴシック</option>
+  <option value="handwriting">手書き風</option>
+</select>
+
+// テキスト色カラーピッカー
+<div>
+  <label>カードテキスト色</label>
+  <input
+    type="color"
+    value={layout.textColor}
+    onChange={(e) => setLayout({...layout, textColor: e.target.value})}
+    className="w-full h-12 rounded cursor-pointer"
+  />
+</div>
+
+// プレビューに反映
+<div 
+  className="card-preview"
+  style={{
+    backgroundColor: layout.backgroundColor,
+    color: layout.textColor,
+    fontFamily: getFontFamily(layout.fontFamily),
+    fontSize: getTextSize(layout.textSize),
+  }}
+>
+  {/* カード内容 */}
+</div>
+```
+
+---
+
+## 実装優先順位
+
+1. **修正1: MY COLLECTION 開閉式** (15分)
+2. **修正2: カード一覧アイコン表示** (20分)
+3. **修正3: 表面・裏面画像登録** (30分)
+4. **修正4: レイアウトカスタマイズ** (30分)
+
+**合計: 1.5時間**
+
+---
+
+この4つの修正を実装してください。
+実装完了したら、動作確認します。
