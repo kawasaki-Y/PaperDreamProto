@@ -215,7 +215,7 @@ function TCGEditor({ gameId, onBack }: { gameId: number; onBack: () => void }) {
           <div className="bg-card/50 backdrop-blur-xl border border-white/5 rounded-md p-4 shadow-xl">
             <Tabs defaultValue="content">
               <TabsList className="w-full">
-                <TabsTrigger value="content" className="flex-1">コンテンツ</TabsTrigger>
+                <TabsTrigger value="content" className="flex-1">カード設定</TabsTrigger>
                 <TabsTrigger value="ai" className="flex-1">AI 分析</TabsTrigger>
               </TabsList>
 
@@ -285,6 +285,18 @@ function TCGEditor({ gameId, onBack }: { gameId: number; onBack: () => void }) {
           </div>
         </div>
       </main>
+
+      <div className="flex justify-end mt-4">
+        <Button
+          data-testid="button-save-card-bottom"
+          onClick={handleSave}
+          disabled={createCardMutation.isPending}
+          className="bg-green-600 text-white border-green-700"
+        >
+          <Save className="w-5 h-5" />
+          {createCardMutation.isPending ? "保存中..." : "カードを保存"}
+        </Button>
+      </div>
     </div>
   );
 }
