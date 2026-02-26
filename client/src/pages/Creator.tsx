@@ -123,22 +123,30 @@ interface TCGAttributes {
   effect: string;
 }
 
-function TCGEditor({ gameId, onBack }: { gameId: number; onBack: () => void }) {
+function TCGCardEditor({ gameId, editCard, onBack }: {
+  gameId: number;
+  editCard: Card | null;
+  onBack: () => void;
+}) {
   const { toast } = useToast();
-  const { data: existingCards } = useGameCards(gameId);
-  const deleteCardMutation = useDeleteCard();
-
-  const [formData, setFormData] = useState<BalanceRequest>({
-    name: "サイバー・ドラゴン",
-    attack: 8,
-    hp: 5,
-    effect: "このカードが召喚された時、相手の魔法カードを1枚破壊する。",
-    type: "monster",
-  });
-
-  const [suggestion, setSuggestion] = useState<BalanceResponse | null>(null);
   const balanceCheckMutation = useBalanceCheck();
   const createCardMutation = useCreateCard();
+  const updateCardMutation = useUpdateCard();
+  const uploadImageMutation = useUploadImage();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const isEditing = editCard !== null && editCard.id > 0;
+  const existingAttrs = editCard?.attributes as TCGAttributes | null;
+
+  const [formData, setFormData] = useState<BalanceRequest>({
+    name: isEditing ? editCard!.name : "",
+    attack: existingAttrs?.attack ?? 8,
+    hp: existingAttrs?.hp ?? 5,
+    effect: existingAttrs?.effect ?? "",
+    type: existingAttrs?.type ?? "monster",
+  });
+  const [imageUrl, setImageUrl] = useState(editCard?.imageUrl || editCard?.frontImageUrl || "");
+  const [suggestion, setSuggestion] = useState<BalanceResponse | null>(null);
 
   const handleAnalyze = () => {
     balanceCheckMutation.mutate(formData, {
@@ -158,6 +166,20 @@ function TCGEditor({ gameId, onBack }: { gameId: number; onBack: () => void }) {
     toast({ title: "変更を適用", description: "カードのステータスが推奨値に更新されました。" });
   };
 
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    uploadImageMutation.mutate(file, {
+      onSuccess: (data) => {
+        setImageUrl(data.url);
+        toast({ title: "画像をアップロードしました" });
+      },
+      onError: (error) => {
+        toast({ variant: "destructive", title: "アップロードに失敗しました", description: error.message });
+      },
+    });
+  };
+
   const handleSave = () => {
     const attributes: TCGAttributes = {
       type: formData.type,
@@ -165,34 +187,52 @@ function TCGEditor({ gameId, onBack }: { gameId: number; onBack: () => void }) {
       hp: formData.hp,
       effect: formData.effect,
     };
-    createCardMutation.mutate({
-      gameId,
-      name: formData.name,
-      attributes: attributes as unknown as Record<string, unknown>,
-    }, {
-      onSuccess: () => {
-        toast({
-          title: "カードを保存しました",
-          description: `「${formData.name}」がゲームに追加されました。`,
-          className: "bg-green-600 border-green-700 text-white",
-        });
-      },
-      onError: (error) => {
-        toast({ variant: "destructive", title: "保存に失敗しました", description: error.message });
-      }
-    });
+    if (isEditing) {
+      updateCardMutation.mutate({
+        cardId: editCard!.id,
+        gameId,
+        name: formData.name,
+        imageUrl,
+        attributes: attributes as unknown as Record<string, unknown>,
+      }, {
+        onSuccess: () => {
+          toast({
+            title: "カードを更新しました",
+            description: `「${formData.name}」を更新しました。`,
+            className: "bg-green-600 border-green-700 text-white",
+          });
+          onBack();
+        },
+        onError: (error) => {
+          toast({ variant: "destructive", title: "更新に失敗しました", description: error.message });
+        }
+      });
+    } else {
+      createCardMutation.mutate({
+        gameId,
+        name: formData.name,
+        imageUrl,
+        attributes: attributes as unknown as Record<string, unknown>,
+      }, {
+        onSuccess: () => {
+          toast({
+            title: "カードを保存しました",
+            description: `「${formData.name}」がゲームに追加されました。`,
+            className: "bg-green-600 border-green-700 text-white",
+          });
+          onBack();
+        },
+        onError: (error) => {
+          toast({ variant: "destructive", title: "保存に失敗しました", description: error.message });
+        }
+      });
+    }
   };
 
-  const handleDeleteCard = (cardId: number) => {
-    deleteCardMutation.mutate({ cardId, gameId }, {
-      onSuccess: () => {
-        toast({ title: "カードを削除しました" });
-      },
-    });
-  };
+  const isPending = createCardMutation.isPending || updateCardMutation.isPending;
 
   return (
-    <div className="min-h-screen p-4 md:p-8 space-y-8 max-w-[1600px] mx-auto">
+    <div className="min-h-screen p-4 md:p-8 space-y-6 max-w-[1400px] mx-auto">
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <Button data-testid="button-back-type-select" variant="outline" size="icon" onClick={onBack}>
@@ -200,21 +240,35 @@ function TCGEditor({ gameId, onBack }: { gameId: number; onBack: () => void }) {
           </Button>
           <Header size="sm" />
         </div>
-        <div className="flex flex-col items-end gap-1">
-          {!formData.name.trim() && !createCardMutation.isPending && (
-            <p className="text-xs text-amber-400">カード名を入力してください</p>
-          )}
-          <Button
-            data-testid="button-save-card"
-            onClick={handleSave}
-            disabled={createCardMutation.isPending || !formData.name.trim()}
-            className="bg-green-600 text-white border-green-700"
-          >
-            <Save className="w-5 h-5" />
-            {createCardMutation.isPending ? "保存中..." : "カードを保存"}
+        <div className="flex gap-3 flex-wrap items-start">
+          <Button variant="outline" onClick={onBack} data-testid="button-card-editor-cancel">
+            キャンセル
           </Button>
+          <div className="flex flex-col items-end gap-1">
+            {!formData.name.trim() && !isPending && (
+              <p className="text-xs text-amber-400">カード名を入力してください</p>
+            )}
+            <Button
+              data-testid="button-save-card"
+              onClick={handleSave}
+              disabled={isPending || !formData.name.trim()}
+              className="bg-green-600 text-white border-green-700"
+            >
+              <Save className="w-5 h-5" />
+              {isPending ? "保存中..." : isEditing ? "更新して戻る" : "保存して戻る"}
+            </Button>
+          </div>
         </div>
       </header>
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        onChange={handleImageUpload}
+        className="hidden"
+        data-testid="input-card-image-file"
+      />
 
       <main className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         <div className="lg:col-span-4">
@@ -233,40 +287,6 @@ function TCGEditor({ gameId, onBack }: { gameId: number; onBack: () => void }) {
                   </h2>
                   <InputForm values={formData} onChange={setFormData} />
                 </div>
-
-                {existingCards && existingCards.length > 0 && (
-                  <div>
-                    <h2 className="text-lg font-['Orbitron'] mb-4 flex items-center gap-2">
-                      <span className="w-1 h-5 bg-accent rounded-full"></span>
-                      保存済みカード ({existingCards.length})
-                    </h2>
-                    <div className="space-y-2">
-                      {existingCards.map((card) => {
-                        const attrs = card.attributes as TCGAttributes | null;
-                        return (
-                          <div key={card.id} className="flex items-center justify-between gap-2 p-2 rounded-md bg-background/50">
-                            <div className="min-w-0">
-                              <p className="text-sm font-medium truncate">{card.name}</p>
-                              {attrs && (
-                                <p className="text-xs text-muted-foreground">
-                                  ATK {attrs.attack} / HP {attrs.hp}
-                                </p>
-                              )}
-                            </div>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleDeleteCard(card.id)}
-                              data-testid={`button-delete-card-${card.id}`}
-                            >
-                              <Trash2 className="w-3 h-3 text-destructive" />
-                            </Button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
               </TabsContent>
 
               <TabsContent value="ai">
@@ -284,28 +304,23 @@ function TCGEditor({ gameId, onBack }: { gameId: number; onBack: () => void }) {
 
         <div className="lg:col-span-8 flex flex-col items-center">
           <div className="sticky top-8 w-full">
-            <div className="relative z-10">
+            <div
+              className="relative z-10 cursor-pointer group"
+              onClick={() => fileInputRef.current?.click()}
+              title="クリックして画像を変更"
+            >
               <CardPreview {...formData} isLoading={balanceCheckMutation.isPending} />
+              <div className="absolute inset-0 flex items-end justify-center pb-6 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                <span className="bg-black/70 text-white text-xs px-3 py-1.5 rounded-full flex items-center gap-1.5">
+                  <ImagePlus className="w-3 h-3" />
+                  {imageUrl ? "画像を変更" : "画像を追加"}
+                </span>
+              </div>
             </div>
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-primary/20 blur-[100px] rounded-full -z-10 pointer-events-none"></div>
           </div>
         </div>
       </main>
-
-      <div className="flex flex-col items-end gap-1 mt-4">
-        {!formData.name.trim() && !createCardMutation.isPending && (
-          <p className="text-xs text-amber-400">カード名を入力してください</p>
-        )}
-        <Button
-          data-testid="button-save-card-bottom"
-          onClick={handleSave}
-          disabled={createCardMutation.isPending || !formData.name.trim()}
-          className="bg-green-600 text-white border-green-700"
-        >
-          <Save className="w-5 h-5" />
-          {createCardMutation.isPending ? "保存中..." : "カードを保存"}
-        </Button>
-      </div>
     </div>
   );
 }
@@ -700,6 +715,137 @@ function EditableCardPreview({
   );
 }
 
+function TCGGameCreateForm({ onSubmit, onCancel }: {
+  onSubmit: (title: string, description: string) => void;
+  onCancel: () => void;
+}) {
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [duplicateDialog, setDuplicateDialog] = useState<{ open: boolean; existingGameId: number | null }>({ open: false, existingGameId: null });
+  const { data: games } = useGames();
+  const [, setLocation] = useLocation();
+
+  const trimmedTitle = title.trim();
+  const existingGame = trimmedTitle ? games?.find(g => g.title === trimmedTitle) : null;
+
+  const handleSubmit = () => {
+    if (!trimmedTitle) return;
+    if (existingGame) {
+      setDuplicateDialog({ open: true, existingGameId: existingGame.id });
+      return;
+    }
+    onSubmit(trimmedTitle, description);
+  };
+
+  return (
+    <div className="min-h-screen flex flex-col items-center p-6 relative overflow-x-hidden">
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-violet-600/10 via-background to-background" />
+      </div>
+
+      <div className="relative z-10 max-w-lg w-full pt-16 pb-12 space-y-8">
+        <div className="flex items-center gap-4">
+          <Button data-testid="button-tcg-create-back" variant="outline" size="icon" onClick={onCancel}>
+            <ArrowLeft className="w-5 h-5" />
+          </Button>
+          <Header size="sm" />
+        </div>
+
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+          <UICard className="overflow-visible">
+            <CardContent className="p-8 space-y-6">
+              <div className="text-center space-y-2">
+                <div className="w-14 h-14 rounded-md bg-gradient-to-br from-violet-600 to-purple-800 flex items-center justify-center shadow-lg mx-auto">
+                  <Swords className="w-7 h-7 text-white" />
+                </div>
+                <h2 className="text-xl font-bold" style={{ fontFamily: "'Orbitron', sans-serif" }}>
+                  新しいTCGゲームを作成
+                </h2>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-['Orbitron'] tracking-wider text-muted-foreground">
+                  ゲーム名
+                </label>
+                <input
+                  data-testid="input-tcg-game-title"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="例: 天空の決闘"
+                  className="w-full bg-black/20 border-2 border-border/50 rounded-md px-4 py-3 text-lg font-bold focus:border-violet-500 focus:outline-none focus:ring-4 focus:ring-violet-500/10 transition-all placeholder:text-muted-foreground/50"
+                />
+                {title.length > 0 && !trimmedTitle && (
+                  <p className="text-xs text-destructive" style={{ fontFamily: "'Rajdhani', sans-serif" }}>ゲーム名を入力してください</p>
+                )}
+                {existingGame && (
+                  <p className="text-xs text-amber-400" style={{ fontFamily: "'Rajdhani', sans-serif" }}>同名のゲームがあります</p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-['Orbitron'] tracking-wider text-muted-foreground">
+                  ゲーム説明
+                </label>
+                <textarea
+                  data-testid="input-tcg-game-description"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="例: 召喚魔法と戦略のカードゲーム"
+                  rows={3}
+                  className="w-full bg-black/20 border-2 border-border/50 rounded-md px-4 py-3 text-base resize-none focus:border-violet-500 focus:outline-none focus:ring-4 focus:ring-violet-500/10 transition-all placeholder:text-muted-foreground/50"
+                />
+              </div>
+
+              <div className="flex gap-3 justify-end pt-2">
+                <Button variant="outline" onClick={onCancel} data-testid="button-tcg-create-cancel">
+                  キャンセル
+                </Button>
+                <Button
+                  onClick={handleSubmit}
+                  disabled={!trimmedTitle}
+                  className="bg-violet-600 text-white border-violet-700"
+                  data-testid="button-tcg-create-submit"
+                >
+                  ゲームを作成
+                </Button>
+              </div>
+            </CardContent>
+          </UICard>
+        </motion.div>
+      </div>
+
+      <Dialog open={duplicateDialog.open} onOpenChange={(open) => setDuplicateDialog(d => ({ ...d, open }))}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle style={{ fontFamily: "'Orbitron', sans-serif" }}>同名のゲームがあります</DialogTitle>
+            <DialogDescription style={{ fontFamily: "'Rajdhani', sans-serif" }} className="text-base pt-1">
+              「{trimmedTitle}」はすでに存在します。どうしますか？
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex-col gap-2 sm:flex-col">
+            <Button className="w-full" onClick={() => setLocation(`/create/${duplicateDialog.existingGameId}`)}>
+              既存を開く
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => {
+                setTitle(trimmedTitle + " (2)");
+                setDuplicateDialog({ open: false, existingGameId: null });
+              }}
+            >
+              別名で作る（「{trimmedTitle} (2)」を提案）
+            </Button>
+            <Button variant="ghost" className="w-full" onClick={() => setDuplicateDialog({ open: false, existingGameId: null })}>
+              キャンセル
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
 function PCGGameCreateForm({ onSubmit, onCancel }: {
   onSubmit: (title: string, description: string) => void;
   onCancel: () => void;
@@ -837,6 +983,150 @@ function PCGGameCreateForm({ onSubmit, onCancel }: {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function TCGCardManager({ gameId, onBack }: { gameId: number; onBack: () => void }) {
+  const { toast } = useToast();
+  const { data: game } = useGame(gameId);
+  const { data: existingCards, isLoading: cardsLoading } = useGameCards(gameId);
+  const deleteCardMutation = useDeleteCard();
+  const [, setLocation] = useLocation();
+  const [editingCardId, setEditingCardId] = useState<number | null>(null);
+
+  const handleDeleteCard = (cardId: number) => {
+    deleteCardMutation.mutate({ cardId, gameId }, {
+      onSuccess: () => toast({ title: "カードを削除しました" }),
+    });
+  };
+
+  if (editingCardId !== null) {
+    const card = existingCards?.find(c => c.id === editingCardId);
+    return (
+      <TCGCardEditor
+        gameId={gameId}
+        editCard={editingCardId === -1 ? null : (card || null)}
+        onBack={() => setEditingCardId(null)}
+      />
+    );
+  }
+
+  return (
+    <div className="min-h-screen p-4 md:p-8 space-y-8 max-w-[1200px] mx-auto">
+      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <Button data-testid="button-back-type-select" variant="outline" size="icon" onClick={onBack}>
+            <ArrowLeft className="w-5 h-5" />
+          </Button>
+          <Header size="sm" />
+        </div>
+        <Button variant="outline" onClick={() => setLocation("/preview")} data-testid="button-goto-preview">
+          <Printer className="w-4 h-4" />
+          印刷プレビューへ
+        </Button>
+      </header>
+
+      {game && (
+        <div className="bg-card/50 backdrop-blur-xl border border-white/5 rounded-md p-6 shadow-xl">
+          <div className="flex items-center gap-3 mb-1">
+            <div className="w-8 h-8 rounded-md bg-gradient-to-br from-violet-600 to-purple-800 flex items-center justify-center shadow-sm">
+              <Swords className="w-4 h-4 text-white" />
+            </div>
+            <h2 className="text-xl font-bold" style={{ fontFamily: "'Orbitron', sans-serif" }}>
+              {game.title}
+            </h2>
+          </div>
+          {game.description && (
+            <p className="text-sm text-muted-foreground ml-11">
+              {game.description.replace(/^\[TCG\]\s*/, "")}
+            </p>
+          )}
+        </div>
+      )}
+
+      <div>
+        <div className="flex items-center justify-between mb-6 gap-4 flex-wrap">
+          <h3 className="text-lg font-bold flex items-center gap-2" style={{ fontFamily: "'Orbitron', sans-serif" }}>
+            <span className="w-1 h-5 bg-primary rounded-full"></span>
+            作成済みカード一覧 ({existingCards?.length || 0}枚)
+          </h3>
+          <Button
+            onClick={() => setEditingCardId(-1)}
+            className="bg-violet-600 text-white border-violet-700"
+            data-testid="button-add-new-card"
+          >
+            <Plus className="w-4 h-4" />
+            新規カード
+          </Button>
+        </div>
+
+        {cardsLoading ? (
+          <div className="flex items-center justify-center py-16">
+            <div className="w-10 h-10 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
+          </div>
+        ) : existingCards && existingCards.length > 0 ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+            {existingCards.map((card) => {
+              const attrs = card.attributes as TCGAttributes | null;
+              const thumbUrl = card.imageUrl || card.frontImageUrl;
+              const typeLabel = attrs?.type === "monster" ? "モンスター" : attrs?.type === "spell" ? "魔法" : "罠";
+              const typeColor = attrs?.type === "monster" ? "border-violet-500" : attrs?.type === "spell" ? "border-cyan-500" : "border-red-500";
+              return (
+                <div
+                  key={card.id}
+                  className={`rounded-md border-2 ${typeColor} overflow-hidden hover-elevate active-elevate-2 cursor-pointer`}
+                  data-testid={`card-item-${card.id}`}
+                  onClick={() => setEditingCardId(card.id)}
+                >
+                  <div className="aspect-[63/88] bg-muted/50 overflow-hidden">
+                    {thumbUrl ? (
+                      <img src={thumbUrl} alt={card.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground/40 p-2">
+                        <Swords className="w-8 h-8 mb-1" />
+                        <span className="text-[10px]">No Image</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="p-2 space-y-1">
+                    <p className="text-sm font-semibold text-center truncate">{card.name}</p>
+                    {attrs && <p className="text-[10px] text-muted-foreground text-center">ATK {attrs.attack} / HP {attrs.hp}</p>}
+                    <span className="block text-[10px] text-muted-foreground text-center">{typeLabel}</span>
+                    <div className="flex gap-1">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1 text-xs"
+                        onClick={(e) => { e.stopPropagation(); setEditingCardId(card.id); }}
+                        data-testid={`button-edit-card-${card.id}`}
+                      >
+                        <Pencil className="w-3 h-3" />
+                        編集
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="shrink-0"
+                        onClick={(e) => { e.stopPropagation(); handleDeleteCard(card.id); }}
+                        data-testid={`button-delete-card-${card.id}`}
+                      >
+                        <Trash2 className="w-3 h-3 text-destructive" />
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="text-center py-16 text-muted-foreground">
+            <Swords className="w-12 h-12 mx-auto mb-4 opacity-30" />
+            <p className="text-lg mb-2">まだカードがありません</p>
+            <p className="text-sm">「新規カード」ボタンでカードを追加しましょう</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -1603,15 +1893,14 @@ export default function Creator() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const createGameMutation = useCreateGame();
-  const { data: allGames } = useGames();
 
   const existingGameId = params.id ? parseInt(params.id) : null;
   const { data: existingGame, isLoading: gameLoading } = useGame(existingGameId);
 
   const [gameType, setGameType] = useState<GameType>(null);
   const [activeGameId, setActiveGameId] = useState<number | null>(null);
+  const [tcgStep, setTcgStep] = useState<"create" | "manage">("create");
   const [pcgStep, setPcgStep] = useState<"create" | "manage">("create");
-  const [tcgDuplicateDialog, setTcgDuplicateDialog] = useState<{ open: boolean; existingGameId: number | null }>({ open: false, existingGameId: null });
 
   const resolvedGameId = activeGameId ?? existingGameId;
 
@@ -1624,29 +1913,27 @@ export default function Creator() {
     if (type === "pcg") {
       setPcgStep("create");
     } else {
-      const title = "新しいTCGゲーム";
-      const existing = allGames?.find(g => g.title === title);
-      if (existing) {
-        setGameType(null);
-        setTcgDuplicateDialog({ open: true, existingGameId: existing.id });
-        return;
-      }
-      createGameMutation.mutate({ title, description: "トレーディングカードゲーム" }, {
-        onSuccess: (game) => {
-          setActiveGameId(game.id);
-          setLocation(`/create/${game.id}`);
-          toast({ title: "ゲームを作成しました", description: `「${game.title}」が作成されました。` });
-        },
-        onError: (error) => {
-          if (error instanceof DuplicateTitleError) {
-            setTcgDuplicateDialog({ open: true, existingGameId: error.existingGameId });
-          } else {
-            toast({ variant: "destructive", title: "ゲーム作成に失敗しました", description: error.message });
-          }
-          setGameType(null);
-        }
-      });
+      setTcgStep("create");
     }
+  };
+
+  const handleTCGCreateGame = (title: string, description: string) => {
+    const fullDescription = description || "トレーディングカードゲーム";
+    createGameMutation.mutate({ title, description: fullDescription }, {
+      onSuccess: (game) => {
+        setActiveGameId(game.id);
+        setLocation(`/create/${game.id}`);
+        setTcgStep("manage");
+        toast({ title: "ゲームを作成しました", description: `「${game.title}」が作成されました。` });
+      },
+      onError: (error) => {
+        if (error instanceof DuplicateTitleError) {
+          toast({ variant: "destructive", title: "同名のゲームが存在します", description: "別のゲーム名を入力してください。" });
+        } else {
+          toast({ variant: "destructive", title: "ゲーム作成に失敗しました", description: error.message });
+        }
+      }
+    });
   };
 
   const handlePCGCreateGame = (title: string, description: string) => {
@@ -1676,6 +1963,7 @@ export default function Creator() {
   const handleBack = () => {
     setGameType(null);
     setActiveGameId(null);
+    setTcgStep("create");
     setPcgStep("create");
     setLocation("/");
   };
@@ -1689,11 +1977,23 @@ export default function Creator() {
   }
 
   if (resolvedGameId && resolvedType === "tcg") {
-    return <TCGEditor gameId={resolvedGameId} onBack={handleBack} />;
+    return <TCGCardManager gameId={resolvedGameId} onBack={handleBack} />;
   }
 
   if (resolvedGameId && resolvedType === "pcg") {
     return <PCGCardManager gameId={resolvedGameId} onBack={handleBack} />;
+  }
+
+  if (gameType === "tcg" && tcgStep === "create" && !resolvedGameId) {
+    return (
+      <TCGGameCreateForm
+        onSubmit={handleTCGCreateGame}
+        onCancel={() => {
+          setGameType(null);
+          setTcgStep("create");
+        }}
+      />
+    );
   }
 
   if (gameType === "pcg" && pcgStep === "create" && !resolvedGameId) {
@@ -1708,34 +2008,5 @@ export default function Creator() {
     );
   }
 
-  return (
-    <>
-      <GameTypeSelector onSelect={handleSelectType} />
-      <Dialog open={tcgDuplicateDialog.open} onOpenChange={(open) => setTcgDuplicateDialog(d => ({ ...d, open }))}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle style={{ fontFamily: "'Orbitron', sans-serif" }}>同名のゲームがあります</DialogTitle>
-            <DialogDescription style={{ fontFamily: "'Rajdhani', sans-serif" }} className="text-base pt-1">
-              「新しいTCGゲーム」はすでに存在します。どうしますか？
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="flex-col gap-2 sm:flex-col">
-            <Button
-              className="w-full"
-              onClick={() => setLocation(`/create/${tcgDuplicateDialog.existingGameId}`)}
-            >
-              既存を開く
-            </Button>
-            <Button
-              variant="ghost"
-              className="w-full"
-              onClick={() => setTcgDuplicateDialog({ open: false, existingGameId: null })}
-            >
-              キャンセル
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
-  );
+  return <GameTypeSelector onSelect={handleSelectType} />;
 }
