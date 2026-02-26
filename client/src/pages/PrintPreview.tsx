@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "wouter";
-import { ArrowLeft, Printer, Grid3X3 } from "lucide-react";
+import { ArrowLeft, Printer, Grid3X3, CheckSquare, Square } from "lucide-react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { useGames, useGameCards } from "@/hooks/use-cards";
@@ -138,12 +138,45 @@ export default function PrintPreview() {
   const [selectedGameId, setSelectedGameId] = useState<number | null>(null);
   const { data: cards, isLoading: cardsLoading } = useGameCards(selectedGameId);
 
+  // Card selection state
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedCards, setSelectedCards] = useState<Set<number>>(new Set());
+
   const selectedGame = games?.find(g => g.id === selectedGameId);
   const isLoading = gamesLoading || cardsLoading;
 
+  const toggleCard = (id: number) => {
+    setSelectedCards(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const handleSelectAll = () => {
+    if (!cards) return;
+    if (selectedCards.size === cards.length) {
+      setSelectedCards(new Set());
+    } else {
+      setSelectedCards(new Set(cards.map(c => c.id)));
+    }
+  };
+
+  const handleDeckSelect = (id: number) => {
+    setSelectedGameId(id);
+    setSelectionMode(false);
+    setSelectedCards(new Set());
+  };
+
+  const handlePrint = () => window.print();
+
+  const printCount = selectionMode && selectedCards.size > 0 ? selectedCards.size : cards?.length ?? 0;
+  const allSelected = !!cards && selectedCards.size === cards.length;
+
   return (
     <div className="min-h-screen p-4 md:p-8 space-y-8 max-w-[1400px] mx-auto">
-      <header className="flex items-center justify-between gap-4 flex-wrap">
+      {/* ── Header ─────────────────────────────────────── */}
+      <header className="flex items-center justify-between gap-4 flex-wrap print:hidden">
         <div className="flex items-center gap-4">
           <Button data-testid="link-back-home" variant="outline" size="icon" asChild>
             <Link href="/">
@@ -152,27 +185,58 @@ export default function PrintPreview() {
           </Button>
           <Header size="sm" />
         </div>
-        <Button
-          data-testid="button-print"
-          onClick={() => window.print()}
-          disabled={!cards || cards.length === 0}
-        >
-          <Printer className="w-4 h-4" /> 印刷する
-        </Button>
+
+        {cards && cards.length > 0 && (
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Selection mode toggle */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setSelectionMode(m => !m);
+                setSelectedCards(new Set());
+              }}
+              data-testid="button-toggle-selection"
+            >
+              {selectionMode ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
+              {selectionMode ? "選択解除" : "カードを選ぶ"}
+            </Button>
+
+            {selectionMode && (
+              <Button variant="outline" size="sm" onClick={handleSelectAll}>
+                {allSelected ? "全解除" : "全選択"}
+              </Button>
+            )}
+
+            {/* Print button */}
+            <Button
+              data-testid="button-print"
+              onClick={handlePrint}
+              className="bg-cyan-600 hover:bg-cyan-700 text-white border-cyan-700"
+            >
+              <Printer className="w-4 h-4" />
+              {selectionMode && selectedCards.size > 0
+                ? `選択した${selectedCards.size}枚を印刷`
+                : "全カードを印刷"}
+            </Button>
+          </div>
+        )}
       </header>
 
+      {/* ── Deck selector ──────────────────────────────── */}
       {games && games.length > 0 && (
-        <div className="flex items-center gap-4 flex-wrap">
-          <p className="text-sm text-muted-foreground" style={{ fontFamily: "'Rajdhani', sans-serif" }}>
-            ゲームを選択:
+        <div className="print:hidden space-y-2">
+          <p className="text-xs text-muted-foreground font-['Orbitron'] uppercase tracking-widest">
+            デッキを選択
           </p>
           <div className="flex gap-2 flex-wrap">
             {games.map((game) => (
               <Button
                 key={game.id}
                 variant={selectedGameId === game.id ? "default" : "outline"}
-                onClick={() => setSelectedGameId(game.id)}
+                onClick={() => handleDeckSelect(game.id)}
                 data-testid={`button-select-game-${game.id}`}
+                className="relative"
               >
                 {game.title}
               </Button>
@@ -181,6 +245,32 @@ export default function PrintPreview() {
         </div>
       )}
 
+      {/* ── Deck info bar ──────────────────────────────── */}
+      {selectedGame && cards && (
+        <div className="flex items-center justify-between gap-4 flex-wrap print:hidden">
+          <div className="flex items-center gap-3">
+            <div className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+            <span className="font-bold" style={{ fontFamily: "'Cinzel', serif" }}>{selectedGame.title}</span>
+            <span className="text-sm text-muted-foreground">{cards.length}枚</span>
+            {selectionMode && selectedCards.size > 0 && (
+              <span className="text-sm text-amber-400 font-['Orbitron']">{selectedCards.size}枚選択中</span>
+            )}
+          </div>
+          <Button
+            size="sm"
+            onClick={handlePrint}
+            disabled={cards.length === 0}
+            className="bg-cyan-600 hover:bg-cyan-700 text-white border-cyan-700"
+          >
+            <Printer className="w-3 h-3" />
+            {selectionMode && selectedCards.size > 0
+              ? `${selectedCards.size}枚を印刷`
+              : "このデッキを印刷"}
+          </Button>
+        </div>
+      )}
+
+      {/* ── Card grid ──────────────────────────────────── */}
       {isLoading ? (
         <div className="flex items-center justify-center py-20">
           <div className="w-10 h-10 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
@@ -194,7 +284,7 @@ export default function PrintPreview() {
           <Grid3X3 className="w-16 h-16 mx-auto text-muted-foreground/30" />
           <p className="text-muted-foreground" style={{ fontFamily: "'Rajdhani', sans-serif" }}>
             {games && games.length > 0
-              ? "上のボタンからプレビューするゲームを選択してください。"
+              ? "上のボタンからプレビューするデッキを選択してください。"
               : "カードがありません。まず「創作」からカードを作成してください。"}
           </p>
           {(!games || games.length === 0) && (
@@ -218,6 +308,7 @@ export default function PrintPreview() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 print:grid-cols-3 print:gap-4">
           {cards.map((card) => {
             const attrs = card.attributes;
+            const isPrinted = !selectionMode || selectedCards.has(card.id);
 
             if (isPCGCard(attrs)) {
               return (
@@ -225,8 +316,27 @@ export default function PrintPreview() {
                   key={card.id}
                   initial={{ opacity: 0, scale: 0.9 }}
                   animate={{ opacity: 1, scale: 1 }}
-                  className="w-full max-w-xs mx-auto"
+                  className="w-full max-w-xs mx-auto relative"
+                  data-print-hidden={!isPrinted ? "true" : undefined}
                 >
+                  {/* Selection checkbox overlay */}
+                  {selectionMode && (
+                    <button
+                      onClick={() => toggleCard(card.id)}
+                      className={`absolute top-2 left-2 z-20 w-6 h-6 rounded flex items-center justify-center transition-all border-2 print:hidden ${
+                        selectedCards.has(card.id)
+                          ? "bg-amber-500 border-amber-400 text-white"
+                          : "bg-black/60 border-white/40 text-white/60"
+                      }`}
+                      aria-label={selectedCards.has(card.id) ? "選択解除" : "選択"}
+                    >
+                      {selectedCards.has(card.id) && (
+                        <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.5">
+                          <polyline points="1.5 6 4.5 9 10.5 3" />
+                        </svg>
+                      )}
+                    </button>
+                  )}
                   <PCGPrintCard card={{ name: card.name, frontImageUrl: card.frontImageUrl || card.imageUrl || "", attributes: attrs }} />
                 </motion.div>
               );
@@ -239,8 +349,25 @@ export default function PrintPreview() {
                 data-testid={`print-card-${card.name}`}
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="w-full max-w-xs mx-auto"
+                className="w-full max-w-xs mx-auto relative"
+                data-print-hidden={!isPrinted ? "true" : undefined}
               >
+                {selectionMode && (
+                  <button
+                    onClick={() => toggleCard(card.id)}
+                    className={`absolute top-2 left-2 z-20 w-6 h-6 rounded flex items-center justify-center transition-all border-2 print:hidden ${
+                      selectedCards.has(card.id)
+                        ? "bg-amber-500 border-amber-400 text-white"
+                        : "bg-black/60 border-white/40 text-white/60"
+                    }`}
+                  >
+                    {selectedCards.has(card.id) && (
+                      <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <polyline points="1.5 6 4.5 9 10.5 3" />
+                      </svg>
+                    )}
+                  </button>
+                )}
                 <CardPreview
                   name={card.name}
                   attack={tcgAttrs?.attack ?? 0}

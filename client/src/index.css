@@ -115,4 +115,7 @@
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
+  [data-print-hidden="true"] {
+    display: none !important;
+  }
 }
