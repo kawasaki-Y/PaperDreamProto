@@ -960,11 +960,12 @@ function EditableCardPreview({
           </button>
         )}
 
-        {/* Header — title name (shrink-0) */}
+        {/* Header — title name (shrink-0). クリックで titleBg 選択 */}
         <div
-          className={`p-3 flex items-center border-b border-white/10 shrink-0 cursor-pointer transition-all ${selRing("titleBg")}`}
+          className={`p-2 flex items-center border-b border-white/10 shrink-0 cursor-pointer transition-all hover:ring-1 hover:ring-white/20 ${selRing("titleBg")}`}
           style={{ backgroundColor: cs.titleBg, borderRadius: headerRadius }}
           onClick={(e) => { e.stopPropagation(); onSelectPart?.("titleBg"); }}
+          title="クリックでタイトル背景色を選択"
         >
           {editingField === "name" ? (
             <input
@@ -991,25 +992,41 @@ function EditableCardPreview({
           )}
         </div>
 
-        {/* Image area — flex-1 fills most of card */}
+        {/* Image area — flex-1 fills most of card.
+            画像なし→クリックでファイルピッカー、画像あり→imageFrame色選択 */}
         <div
-          className={`flex-1 min-h-0 mx-3 mt-2 rounded-md overflow-hidden border cursor-pointer transition-all ${selRing("imageFrame")}`}
+          className={`flex-1 min-h-0 mx-2 mt-1.5 rounded-md overflow-hidden border cursor-pointer transition-all hover:ring-1 hover:ring-white/20 relative ${selRing("imageFrame")}`}
           style={{ borderColor: cs.imageFrame }}
-          onClick={(e) => { e.stopPropagation(); onSelectPart?.("imageFrame"); onImageClick(); }}
+          onClick={(e) => {
+            e.stopPropagation();
+            onSelectPart?.("imageFrame");
+            if (!frontImageUrl) onImageClick();
+          }}
           data-testid="preview-image-area"
         >
           {frontImageUrl ? (
-            <img src={frontImageUrl} alt={formData.name} className="w-full h-full object-cover" />
+            <>
+              <img src={frontImageUrl} alt={formData.name} className="w-full h-full object-cover" />
+              {/* 画像がある場合は右下に小さいカメラアイコン */}
+              <button
+                type="button"
+                className="absolute bottom-1.5 right-1.5 w-6 h-6 bg-black/60 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-80 transition-opacity hover:opacity-100"
+                onClick={(e) => { e.stopPropagation(); onImageClick(); }}
+                title="画像を変更"
+              >
+                <ImagePlus className="w-3 h-3 text-white" />
+              </button>
+            </>
           ) : (
-            <div className="w-full h-full flex items-center justify-center bg-white/10 text-white/50 gap-2">
-              <ImagePlus className="w-5 h-5" />
-              <span style={{ fontSize: sizes.body }}>クリックして画像を選択</span>
+            <div className="w-full h-full flex flex-col items-center justify-center bg-white/5 text-white/40 gap-1.5">
+              <ImagePlus className="w-6 h-6" />
+              <span className="text-center leading-tight" style={{ fontSize: sizes.label }}>クリックして<br />画像を追加</span>
             </div>
           )}
         </div>
 
         {/* Tags — compact, shrink-0 */}
-        <div className="px-3 pt-1.5 pb-0.5 flex items-center gap-1 shrink-0 overflow-hidden">
+        <div className="px-2 pt-1 pb-0.5 flex items-center gap-1 shrink-0 overflow-hidden">
           <span
             className="px-1.5 py-0.5 rounded text-[10px] whitespace-nowrap shrink-0 font-semibold"
             style={{ backgroundColor: cs.accent + "40", color: cs.accent }}
@@ -1020,11 +1037,12 @@ function EditableCardPreview({
           {formData.difficulty && <span className="bg-white/10 opacity-60 px-1.5 py-0.5 rounded text-[10px] whitespace-nowrap shrink-0">{formData.difficulty === "easy" ? "かんたん" : formData.difficulty === "normal" ? "ふつう" : "むずかしい"}</span>}
         </div>
 
-        {/* Content area — fixed max height, scrollable, click to edit */}
+        {/* Content area — fixed max height, scrollable. クリックで bodyText 色選択 */}
         <div
-          className={`shrink-0 mx-3 mt-1 ${footerVisible ? "mb-8" : "mb-2"} max-h-[28%] bg-black/40 rounded-md p-2 border backdrop-blur-md overflow-y-auto space-y-1.5 cursor-pointer transition-all ${selRing("bodyText")}`}
+          className={`shrink-0 mx-2 mt-0.5 ${footerVisible ? "mb-7" : "mb-1.5"} max-h-[22%] bg-black/40 rounded-md p-2 border backdrop-blur-md overflow-y-auto space-y-1 cursor-pointer transition-all hover:ring-1 hover:ring-white/20 ${selRing("bodyText")}`}
           style={{ borderColor: cs.imageFrame }}
           onClick={(e) => { e.stopPropagation(); onSelectPart?.("bodyText"); }}
+          title="クリックで本文色を選択"
         >
           <div>
             <p className="opacity-50 uppercase font-['Orbitron'] mb-0.5" style={{ fontSize: sizes.label }}>アクション</p>
@@ -1080,12 +1098,13 @@ function EditableCardPreview({
 
         {footerVisible && (
           <div
-            className={`absolute bottom-0 w-full p-2 text-center text-[10px] font-['Orbitron'] uppercase tracking-[0.2em] cursor-pointer transition-all ${selRing("accent")}`}
+            className={`absolute bottom-0 w-full p-1.5 text-center text-[9px] font-['Orbitron'] uppercase tracking-[0.2em] cursor-pointer transition-all hover:ring-1 hover:ring-white/20 ${selRing("accent")}`}
             style={{
               backgroundColor: footerBg || cs.accent + "33",
               color: footerText || cs.accent,
             }}
             onClick={(e) => { e.stopPropagation(); onSelectPart?.("accent"); }}
+            title="クリックでアクセント色を選択"
           >
             PARTY CARD
           </div>
@@ -1954,7 +1973,7 @@ function PCGCardEditor({ gameId, editCard, onBack }: {
                   </h3>
                   <div className="flex flex-wrap gap-1">
                     {(Object.keys(cardPartLabels) as CardPart[]).map((part) => {
-                      const cs = getCardStyle(design);
+                      const currentCardStyle = getCardStyle(design);
                       return (
                         <button
                           key={part}
@@ -1970,13 +1989,18 @@ function PCGCardEditor({ gameId, editCard, onBack }: {
                         >
                           <span
                             className="w-3 h-3 rounded-sm border border-white/20 shrink-0"
-                            style={{ backgroundColor: cs[part] }}
+                            style={{ backgroundColor: currentCardStyle[part] }}
                           />
                           {cardPartLabels[part]}
                         </button>
                       );
                     })}
                   </div>
+                  {!selectedPart && (
+                    <p className="text-xs text-muted-foreground/60 text-center py-1">
+                      ↑ 部位を選択、またはプレビューをクリック
+                    </p>
+                  )}
                   <PCGColorEditorPanel
                     selectedPart={selectedPart}
                     cardStyle={getCardStyle(design)}

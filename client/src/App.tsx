@@ -3,6 +3,7 @@ import { queryClient } from "./lib/queryClient.ts";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/Home";
 import Creator from "@/pages/Creator";
@@ -26,7 +27,11 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-<Router />
+        {/* ThemeSwitcher — 全画面固定 left-top */}
+        <div className="fixed top-4 left-4 z-50">
+          <ThemeSwitcher />
+        </div>
+        <Router />
         <Toaster />
       </TooltipProvider>
     </QueryClientProvider>

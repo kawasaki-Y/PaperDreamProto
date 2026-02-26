@@ -6,7 +6,6 @@ import { useGames, useDeleteGame } from "@/hooks/use-cards";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 
 const menuItems = [
   {
@@ -52,11 +51,6 @@ export default function Home() {
 
   return (
     <div className="min-h-screen flex flex-col items-center p-6 relative overflow-x-hidden">
-      {/* ThemeSwitcher — 左上固定 */}
-      <div className="absolute top-6 left-6 z-50">
-        <ThemeSwitcher />
-      </div>
-
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary/10 via-background to-background" />
         <div className="absolute bottom-0 right-0 w-[500px] h-[500px] bg-accent/5 rounded-full blur-[120px]" />
