@@ -190,6 +190,30 @@ export function useDeleteCard() {
   });
 }
 
+export function usePCGConsult() {
+  return useMutation({
+    mutationFn: async (data: {
+      name: string;
+      type: string;
+      action: string;
+      effect: string;
+      promptType: "improve" | "shorten" | "penalty";
+    }) => {
+      const res = await fetch("/api/ai/pcg-consult", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({}));
+        throw new Error((error as { message?: string }).message || "AI相談に失敗しました");
+      }
+      return res.json() as Promise<{ response: string }>;
+    },
+  });
+}
+
 export function useBalanceCheck() {
   return useMutation({
     mutationFn: async (data: BalanceRequest) => {

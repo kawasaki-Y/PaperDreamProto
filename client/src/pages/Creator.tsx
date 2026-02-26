@@ -1,16 +1,17 @@
 import { useState, useRef } from "react";
 import { InputForm } from "@/components/InputForm";
 import { type PCGFormData } from "@/components/PCGInputForm";
-import { CardPreview } from "@/components/CardPreview";
+import { clsx } from "clsx";
 import { AIPanel } from "@/components/AIPanel";
 import {
   useBalanceCheck, useCreateGame, useCreateCard, useUpdateCard,
-  useGame, useGameCards, useDeleteCard, useUploadImage, useGames, DuplicateTitleError
+  useGame, useGameCards, useDeleteCard, useUploadImage, useGames, DuplicateTitleError,
+  usePCGConsult,
 } from "@/hooks/use-cards";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { type BalanceRequest, type BalanceResponse, type Card } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Save, Swords, PartyPopper, Plus, Trash2, Pencil, Printer, ImagePlus, RotateCcw } from "lucide-react";
+import { ArrowLeft, Save, Swords, Sword, Heart, Sparkles, Shield, Skull, PartyPopper, Plus, Trash2, Pencil, Printer, ImagePlus, RotateCcw, Palette, Bot } from "lucide-react";
 import { Link, useParams, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -19,6 +20,11 @@ import { Card as UICard, CardContent } from "@/components/ui/card";
 import { motion } from "framer-motion";
 
 type GameType = "tcg" | "pcg" | null;
+
+type TCGPreviewStyle = {
+  textSize: "S" | "M" | "L";
+  theme: "gold" | "violet" | "mono";
+};
 
 function GameTypeSelector({ onSelect }: { onSelect: (type: "tcg" | "pcg") => void }) {
   return (
@@ -121,6 +127,194 @@ interface TCGAttributes {
   attack: number;
   hp: number;
   effect: string;
+  previewStyle?: TCGPreviewStyle;
+}
+
+function TCGCardPreviewEditable({
+  formData,
+  imageUrl,
+  onFieldCommit,
+  onImageClick,
+  previewStyle,
+  isLoading,
+}: {
+  formData: BalanceRequest;
+  imageUrl: string;
+  onFieldCommit: (field: "name" | "effect", value: string) => void;
+  onImageClick: () => void;
+  previewStyle: TCGPreviewStyle;
+  isLoading?: boolean;
+}) {
+  const [editingField, setEditingField] = useState<"name" | "effect" | null>(null);
+  const [draft, setDraft] = useState("");
+
+  const startEditing = (field: "name" | "effect") => {
+    setDraft(field === "name" ? formData.name : formData.effect);
+    setEditingField(field);
+  };
+
+  const commitEdit = () => {
+    if (editingField) {
+      onFieldCommit(editingField, draft);
+      setEditingField(null);
+    }
+  };
+
+  const cancelEdit = () => setEditingField(null);
+
+  const gradientClass = {
+    gold: "from-amber-950 via-yellow-900 to-amber-950",
+    violet: "from-violet-950 via-purple-900 to-violet-950",
+    mono: "from-zinc-900 via-zinc-800 to-zinc-950",
+  }[previewStyle.theme];
+
+  const borderClass = {
+    gold: "border-yellow-500/60",
+    violet: "border-violet-500/60",
+    mono: "border-zinc-500/60",
+  }[previewStyle.theme];
+
+  const typeIconColor = {
+    gold: "text-yellow-400 border-yellow-400",
+    violet: "text-violet-400 border-violet-400",
+    mono: "text-zinc-400 border-zinc-400",
+  }[previewStyle.theme];
+
+  const effectTextClass = {
+    S: "text-sm",
+    M: "text-base",
+    L: "text-lg",
+  }[previewStyle.textSize];
+
+  const getTypeIcon = () => {
+    switch (formData.type) {
+      case "monster": return <Skull className="w-5 h-5" />;
+      case "spell": return <Sparkles className="w-5 h-5" />;
+      case "trap": return <Shield className="w-5 h-5" />;
+    }
+  };
+
+  return (
+    <div className="relative w-full max-w-sm mx-auto aspect-[2.5/3.5]">
+      <motion.div
+        layout
+        className={clsx(
+          "relative w-full h-full rounded-2xl border-4 shadow-2xl overflow-hidden transition-all duration-500 bg-gradient-to-b",
+          gradientClass,
+          borderClass,
+          isLoading ? "opacity-80 blur-sm scale-[0.98]" : ""
+        )}
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+      >
+        {/* Card Header — click to edit name */}
+        <div
+          className="p-4 flex justify-between items-center border-b border-white/10 bg-black/20 backdrop-blur-sm cursor-text"
+          onClick={() => { if (editingField !== "name") startEditing("name"); }}
+        >
+          {editingField === "name" ? (
+            <input
+              autoFocus
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onBlur={commitEdit}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") { e.preventDefault(); commitEdit(); }
+                if (e.key === "Escape") { e.preventDefault(); cancelEdit(); }
+              }}
+              className="font-['Cinzel'] font-bold text-xl text-white bg-white/10 border border-white/30 rounded px-2 py-0.5 focus:outline-none w-full mr-2"
+              onClick={(e) => e.stopPropagation()}
+            />
+          ) : (
+            <h3 className="font-['Cinzel'] font-bold text-xl text-white truncate drop-shadow-md hover:text-white/70 transition-colors">
+              {formData.name || <span className="text-white/30 italic text-base">カード名をクリックして編集</span>}
+            </h3>
+          )}
+          <div className={clsx("p-1.5 rounded-full bg-black/40 shadow-inner flex-shrink-0 ml-2", typeIconColor)}>
+            {getTypeIcon()}
+          </div>
+        </div>
+
+        {/* Card Art — click to upload */}
+        <div
+          className="mx-4 mt-4 aspect-video bg-black/30 rounded-lg border border-white/10 flex items-center justify-center overflow-hidden relative shadow-inner cursor-pointer group/art"
+          onClick={onImageClick}
+        >
+          {imageUrl ? (
+            <img src={imageUrl} alt={formData.name} className="w-full h-full object-cover" />
+          ) : (
+            <>
+              <div
+                className="absolute inset-0 opacity-20"
+                style={{ backgroundImage: "radial-gradient(circle, #fff 1px, transparent 1px)", backgroundSize: "10px 10px" }}
+              />
+              <motion.div
+                className="text-white/20"
+                animate={{ rotate: [0, 5, -5, 0] }}
+                transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
+              >
+                {formData.type === "monster" && <Skull className="w-16 h-16" />}
+                {formData.type === "spell" && <Sparkles className="w-16 h-16" />}
+                {formData.type === "trap" && <Shield className="w-16 h-16" />}
+              </motion.div>
+            </>
+          )}
+          <div className="absolute inset-0 bg-black/50 opacity-0 group-hover/art:opacity-100 flex items-center justify-center transition-opacity">
+            <ImagePlus className="w-8 h-8 text-white/80" />
+          </div>
+        </div>
+
+        {/* Stats Strip */}
+        {formData.type === "monster" && (
+          <div className="flex justify-between items-center px-6 py-2 mt-4 bg-black/40 mx-4 rounded-md border border-white/5">
+            <div className="flex items-center gap-2 text-red-400 font-['Orbitron'] font-bold text-lg">
+              <Sword className="w-4 h-4" />
+              <span>ATK / {formData.attack}</span>
+            </div>
+            <div className="h-4 w-px bg-white/10" />
+            <div className="flex items-center gap-2 text-blue-400 font-['Orbitron'] font-bold text-lg">
+              <span>HP / {formData.hp}</span>
+              <Heart className="w-4 h-4" />
+            </div>
+          </div>
+        )}
+
+        {/* Effect Text — click to edit */}
+        <div
+          className="absolute bottom-4 left-4 right-4 top-[55%] bg-black/40 rounded-lg border border-white/10 backdrop-blur-md cursor-text"
+          onClick={() => { if (editingField !== "effect") startEditing("effect"); }}
+        >
+          <div className="h-full p-4 overflow-hidden">
+            {editingField === "effect" ? (
+              <textarea
+                autoFocus
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onBlur={commitEdit}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") commitEdit();
+                }}
+                className={clsx(
+                  "font-['Rajdhani'] w-full h-full bg-transparent focus:outline-none text-white/90 resize-none",
+                  effectTextClass
+                )}
+                onClick={(e) => e.stopPropagation()}
+              />
+            ) : (
+              <p className={clsx("font-['Rajdhani'] leading-relaxed text-white/90", effectTextClass)}>
+                {formData.effect || <span className="text-white/30 italic">効果テキストをクリックして編集...</span>}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="absolute bottom-0 w-full p-2 text-center text-[10px] font-['Orbitron'] uppercase tracking-[0.2em] text-white/40 bg-black/60">
+          {formData.type.toUpperCase()} CARD
+        </div>
+      </motion.div>
+    </div>
+  );
 }
 
 function TCGCardEditor({ gameId, editCard, onBack }: {
@@ -147,6 +341,10 @@ function TCGCardEditor({ gameId, editCard, onBack }: {
   });
   const [imageUrl, setImageUrl] = useState(editCard?.imageUrl || editCard?.frontImageUrl || "");
   const [suggestion, setSuggestion] = useState<BalanceResponse | null>(null);
+  const [previewStyle, setPreviewStyle] = useState<TCGPreviewStyle>(
+    existingAttrs?.previewStyle ?? { textSize: "M", theme: "gold" }
+  );
+  const nameError = !formData.name.trim() ? "カード名を入力してください" : "";
 
   const handleAnalyze = () => {
     balanceCheckMutation.mutate(formData, {
@@ -186,6 +384,7 @@ function TCGCardEditor({ gameId, editCard, onBack }: {
       attack: formData.attack,
       hp: formData.hp,
       effect: formData.effect,
+      previewStyle,
     };
     if (isEditing) {
       updateCardMutation.mutate({
@@ -240,24 +439,19 @@ function TCGCardEditor({ gameId, editCard, onBack }: {
           </Button>
           <Header size="sm" />
         </div>
-        <div className="flex gap-3 flex-wrap items-start">
+        <div className="flex gap-3 flex-wrap items-center">
           <Button variant="outline" onClick={onBack} data-testid="button-card-editor-cancel">
             キャンセル
           </Button>
-          <div className="flex flex-col items-end gap-1">
-            {!formData.name.trim() && !isPending && (
-              <p className="text-xs text-amber-400">カード名を入力してください</p>
-            )}
-            <Button
-              data-testid="button-save-card"
-              onClick={handleSave}
-              disabled={isPending || !formData.name.trim()}
-              className="bg-green-600 text-white border-green-700"
-            >
-              <Save className="w-5 h-5" />
-              {isPending ? "保存中..." : isEditing ? "更新して戻る" : "保存して戻る"}
-            </Button>
-          </div>
+          <Button
+            data-testid="button-save-card"
+            onClick={handleSave}
+            disabled={isPending || !formData.name.trim()}
+            className="bg-green-600 text-white border-green-700"
+          >
+            <Save className="w-5 h-5" />
+            {isPending ? "保存中..." : isEditing ? "更新して戻る" : "保存して戻る"}
+          </Button>
         </div>
       </header>
 
@@ -285,7 +479,11 @@ function TCGCardEditor({ gameId, editCard, onBack }: {
                     <span className="w-1 h-6 bg-primary rounded-full"></span>
                     カード詳細
                   </h2>
-                  <InputForm values={formData} onChange={setFormData} />
+                  <InputForm
+                    values={formData}
+                    onChange={setFormData}
+                    nameError={nameError}
+                  />
                 </div>
               </TabsContent>
 
@@ -303,21 +501,58 @@ function TCGCardEditor({ gameId, editCard, onBack }: {
         </div>
 
         <div className="lg:col-span-8 flex flex-col items-center">
-          <div className="sticky top-8 w-full">
-            <div
-              className="relative z-10 cursor-pointer group"
-              onClick={() => fileInputRef.current?.click()}
-              title="クリックして画像を変更"
-            >
-              <CardPreview {...formData} isLoading={balanceCheckMutation.isPending} />
-              <div className="absolute inset-0 flex items-end justify-center pb-6 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                <span className="bg-black/70 text-white text-xs px-3 py-1.5 rounded-full flex items-center gap-1.5">
-                  <ImagePlus className="w-3 h-3" />
-                  {imageUrl ? "画像を変更" : "画像を追加"}
-                </span>
+          <div className="sticky top-8 w-full space-y-3">
+            {/* Mini toolbar */}
+            <div className="flex items-center justify-between px-1">
+              <div className="flex items-center gap-1 bg-white/5 rounded-md p-1">
+                {(["S", "M", "L"] as const).map((size) => (
+                  <button
+                    key={size}
+                    type="button"
+                    onClick={() => setPreviewStyle((p) => ({ ...p, textSize: size }))}
+                    className={clsx(
+                      "w-7 h-7 text-xs font-bold rounded transition-all",
+                      previewStyle.textSize === size
+                        ? "bg-primary text-primary-foreground"
+                        : "hover:bg-white/10 text-muted-foreground"
+                    )}
+                  >
+                    {size}
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center gap-1 bg-white/5 rounded-md p-1">
+                {([
+                  { key: "gold" as const, label: "Gold", color: "bg-amber-500" },
+                  { key: "violet" as const, label: "Violet", color: "bg-violet-500" },
+                  { key: "mono" as const, label: "Mono", color: "bg-zinc-500" },
+                ]).map(({ key, label, color }) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setPreviewStyle((p) => ({ ...p, theme: key }))}
+                    className={clsx(
+                      "flex items-center gap-1.5 h-7 px-2.5 text-xs font-bold rounded transition-all",
+                      previewStyle.theme === key ? "bg-white/10 text-white" : "hover:bg-white/10 text-muted-foreground"
+                    )}
+                  >
+                    <span className={clsx("w-2.5 h-2.5 rounded-full", color)} />
+                    {label}
+                  </button>
+                ))}
               </div>
             </div>
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-primary/20 blur-[100px] rounded-full -z-10 pointer-events-none"></div>
+            <div className="relative z-10">
+              <TCGCardPreviewEditable
+                formData={formData}
+                imageUrl={imageUrl}
+                onFieldCommit={(field, value) => setFormData((prev) => ({ ...prev, [field]: value }))}
+                onImageClick={() => fileInputRef.current?.click()}
+                previewStyle={previewStyle}
+                isLoading={balanceCheckMutation.isPending}
+              />
+            </div>
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-primary/20 blur-[100px] rounded-full -z-10 pointer-events-none" />
           </div>
         </div>
       </main>
@@ -346,6 +581,18 @@ interface PCGFooterSettings {
   visible: boolean;
 }
 
+type CardPart = "background" | "border" | "titleBg" | "titleText" | "bodyText" | "accent" | "imageFrame";
+
+interface CardStyle {
+  background: string;
+  border: string;
+  titleBg: string;
+  titleText: string;
+  bodyText: string;
+  accent: string;
+  imageFrame: string;
+}
+
 interface PCGDesignSettings {
   textSize: "xs" | "small" | "medium" | "large";
   backgroundColor: string;
@@ -353,6 +600,7 @@ interface PCGDesignSettings {
   textColor: string;
   header?: PCGHeaderSettings;
   footer?: PCGFooterSettings;
+  cardStyle?: Partial<CardStyle>;
 }
 
 const defaultHeaderSettings: PCGHeaderSettings = {
@@ -532,6 +780,103 @@ function PCGCardPreviewFull({
   );
 }
 
+const defaultCardStyle: CardStyle = {
+  background: "#1e3a5f",
+  border: "#4a6fa5",
+  titleBg: "rgba(0,0,0,0.3)",
+  titleText: "#ffffff",
+  bodyText: "#ffffff",
+  accent: "#f59e0b",
+  imageFrame: "rgba(255,255,255,0.1)",
+};
+
+const cardPartLabels: Record<CardPart, string> = {
+  background: "背景",
+  border: "枠線",
+  titleBg: "タイトル背景",
+  titleText: "タイトル文字",
+  bodyText: "本文文字",
+  accent: "アクセント",
+  imageFrame: "画像枠",
+};
+
+const swatchPresets: Record<CardPart, string[]> = {
+  background: ["#1e3a5f", "#0f172a", "#1c1c1c", "#2d1b4e", "#1a3a2a", "#3b1a1a"],
+  border: ["#4a6fa5", "#6366f1", "#f59e0b", "#10b981", "#ef4444", "#8b5cf6"],
+  titleBg: ["rgba(0,0,0,0.3)", "rgba(0,0,0,0.6)", "rgba(255,255,255,0.1)", "rgba(245,158,11,0.3)"],
+  titleText: ["#ffffff", "#fbbf24", "#60a5fa", "#34d399", "#f87171"],
+  bodyText: ["#ffffff", "#e2e8f0", "#fbbf24", "#94a3b8", "#d1d5db"],
+  accent: ["#f59e0b", "#6366f1", "#10b981", "#ef4444", "#8b5cf6", "#ec4899"],
+  imageFrame: ["rgba(255,255,255,0.1)", "rgba(255,255,255,0.3)", "rgba(0,0,0,0.3)", "rgba(245,158,11,0.4)"],
+};
+
+function getCardStyle(design: PCGDesignSettings): CardStyle {
+  return {
+    ...defaultCardStyle,
+    background: design.backgroundColor || defaultCardStyle.background,
+    bodyText: design.textColor || defaultCardStyle.bodyText,
+    titleText: design.header?.textColor || design.textColor || defaultCardStyle.titleText,
+    titleBg: design.header?.backgroundColor || defaultCardStyle.titleBg,
+    ...(design.cardStyle || {}),
+  };
+}
+
+function PCGColorEditorPanel({
+  selectedPart,
+  cardStyle,
+  onUpdate,
+}: {
+  selectedPart: CardPart | null;
+  cardStyle: CardStyle;
+  onUpdate: (part: CardPart, value: string) => void;
+}) {
+  if (!selectedPart) return null;
+  const current = cardStyle[selectedPart];
+  const presets = swatchPresets[selectedPart];
+  const isHexColor = /^#[0-9a-fA-F]{3,8}$/.test(current);
+
+  return (
+    <div className="bg-black/30 border border-white/10 rounded-md p-3 space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-['Orbitron'] text-amber-400">{cardPartLabels[selectedPart]}</p>
+        <button
+          type="button"
+          onClick={() => onUpdate(selectedPart, defaultCardStyle[selectedPart])}
+          className="text-xs text-muted-foreground hover:text-white transition-colors"
+        >
+          リセット
+        </button>
+      </div>
+      <div className="flex items-center gap-2">
+        <input
+          type="color"
+          value={isHexColor ? current : "#ffffff"}
+          onChange={(e) => onUpdate(selectedPart, e.target.value)}
+          className="w-10 h-8 rounded cursor-pointer border border-border/50 bg-transparent shrink-0"
+        />
+        <input
+          type="text"
+          value={current}
+          onChange={(e) => onUpdate(selectedPart, e.target.value)}
+          className="flex-1 bg-black/20 border border-border/50 rounded px-2 py-1 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-primary/30"
+          placeholder="#000000 または rgba(...)"
+        />
+      </div>
+      <div className="flex gap-1 flex-wrap">
+        {presets.map((p) => (
+          <button
+            key={p}
+            onClick={() => onUpdate(selectedPart, p)}
+            className={`w-7 h-7 rounded border-2 transition-all ${current === p ? "border-primary scale-110" : "border-border/50"}`}
+            style={{ backgroundColor: p }}
+            title={p}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function EditableCardPreview({
   formData,
   updateField,
@@ -540,6 +885,9 @@ function EditableCardPreview({
   side,
   design,
   onImageClick,
+  onDesignClick,
+  selectedPart,
+  onSelectPart,
 }: {
   formData: PCGFormData;
   updateField: (field: string, value: string) => void;
@@ -548,29 +896,36 @@ function EditableCardPreview({
   side: "front" | "back";
   design: PCGDesignSettings;
   onImageClick: () => void;
+  onDesignClick?: () => void;
+  selectedPart?: CardPart | null;
+  onSelectPart?: (part: CardPart) => void;
 }) {
   const [editingField, setEditingField] = useState<string | null>(null);
   const fontFamily = getResolvedFont(design.fontFamily);
   const sizes = getTextSizes(design.textSize);
-  const bgColor = design.backgroundColor;
-  const textCol = design.textColor;
   const typeLabel = formData.type === "action" ? "アクション" : formData.type === "event" ? "イベント" : "ペナルティ";
 
-  const headerBg = design.header?.backgroundColor || "";
-  const headerText = design.header?.textColor || textCol;
+  const cs = getCardStyle(design);
   const headerRadius = getBorderRadius(design.header?.borderRadius || "none");
   const footerBg = design.footer?.backgroundColor || "";
-  const footerText = design.footer?.textColor || textCol;
+  const footerText = design.footer?.textColor || cs.bodyText;
   const footerVisible = design.footer?.visible !== false;
+
+  const selRing = (part: CardPart) =>
+    selectedPart === part ? "ring-2 ring-amber-400 ring-offset-1 ring-offset-transparent" : "";
 
   if (side === "back") {
     return (
-      <div className="w-full aspect-[2.5/3.5]" data-testid="editable-card-preview-back">
-        <div className="relative w-full h-full rounded-md border-4 shadow-2xl overflow-hidden cursor-pointer" style={{ backgroundColor: bgColor }} onClick={onImageClick}>
+      <div className="w-full aspect-[2.5/3.5] group" data-testid="editable-card-preview-back">
+        <div
+          className="relative w-full h-full rounded-md border-4 shadow-2xl overflow-hidden cursor-pointer"
+          style={{ backgroundColor: cs.background, borderColor: cs.border }}
+          onClick={onImageClick}
+        >
           {backImageUrl ? (
             <img src={backImageUrl} alt="裏面" className="absolute inset-0 w-full h-full object-cover" />
           ) : null}
-          <div className="absolute inset-0 flex flex-col items-center justify-center p-6" style={{ color: textCol, fontFamily }}>
+          <div className="absolute inset-0 flex flex-col items-center justify-center p-6" style={{ color: cs.bodyText, fontFamily }}>
             <div className="w-20 h-20 rounded-md bg-white/10 flex items-center justify-center mb-4 backdrop-blur-sm border border-white/20">
               <PartyPopper className="w-10 h-10 opacity-60" />
             </div>
@@ -588,14 +943,28 @@ function EditableCardPreview({
   }
 
   return (
-    <div className="w-full aspect-[2.5/3.5]" data-testid="editable-card-preview-front">
-      <div className="relative w-full h-full rounded-md border-4 shadow-2xl overflow-hidden flex flex-col" style={{ backgroundColor: bgColor, color: textCol, fontFamily }}>
+    <div className="w-full aspect-[2.5/3.5] group" data-testid="editable-card-preview-front">
+      <div
+        className="relative w-full h-full rounded-md border-4 shadow-2xl overflow-hidden flex flex-col"
+        style={{ backgroundColor: cs.background, borderColor: cs.border, color: cs.bodyText, fontFamily }}
+      >
+        {/* Design shortcut button */}
+        {onDesignClick && (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onDesignClick(); }}
+            className="absolute top-2 right-2 z-20 w-7 h-7 bg-black/60 backdrop-blur-sm rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/80"
+            title="デザインタブを開く"
+          >
+            <Palette className="w-3.5 h-3.5 text-white/70" />
+          </button>
+        )}
+
+        {/* Header — title name (shrink-0) */}
         <div
-          className="p-4 flex justify-between items-center border-b border-white/10 backdrop-blur-sm shrink-0"
-          style={{
-            backgroundColor: headerBg || "rgba(0,0,0,0.2)",
-            borderRadius: headerRadius,
-          }}
+          className={`p-3 flex items-center border-b border-white/10 shrink-0 cursor-pointer transition-all ${selRing("titleBg")}`}
+          style={{ backgroundColor: cs.titleBg, borderRadius: headerRadius }}
+          onClick={(e) => { e.stopPropagation(); onSelectPart?.("titleBg"); }}
         >
           {editingField === "name" ? (
             <input
@@ -606,15 +975,15 @@ function EditableCardPreview({
               onKeyDown={(e) => e.key === "Enter" && setEditingField(null)}
               autoFocus
               className="w-full font-bold bg-transparent border-b-2 border-white/40 outline-none"
-              style={{ fontSize: sizes.title, color: headerText, fontFamily }}
+              style={{ fontSize: sizes.title, color: cs.titleText, fontFamily }}
               data-testid="inline-edit-name"
             />
           ) : (
             <h3
-              onClick={() => setEditingField("name")}
+              onClick={(e) => { e.stopPropagation(); setEditingField("name"); }}
               className="font-bold truncate drop-shadow-md cursor-text w-full"
-              style={{ fontFamily, color: headerText, fontSize: sizes.title }}
-              title="クリックして編集"
+              style={{ fontFamily, color: cs.titleText, fontSize: sizes.title }}
+              title="クリックしてカード名を編集"
               data-testid="preview-card-name"
             >
               {formData.name || "クリックしてカード名を編集"}
@@ -622,90 +991,101 @@ function EditableCardPreview({
           )}
         </div>
 
-        <div className="px-4 pt-3 flex items-center gap-2 flex-wrap shrink-0">
-          <span className="bg-white/20 px-2 py-1 rounded-md" style={{ color: textCol, fontSize: sizes.label }}>{typeLabel}</span>
-          {formData.playerCount && <span className="bg-white/10 opacity-80 px-2 py-1 rounded-md" style={{ fontSize: sizes.label }}>{formData.playerCount}</span>}
-          {formData.difficulty && <span className="bg-white/10 opacity-80 px-2 py-1 rounded-md" style={{ fontSize: sizes.label }}>{formData.difficulty === "easy" ? "かんたん" : formData.difficulty === "normal" ? "ふつう" : "むずかしい"}</span>}
-        </div>
-
+        {/* Image area — flex-1 fills most of card */}
         <div
-          className="mx-4 mt-3 rounded-md overflow-hidden border border-white/10 cursor-pointer shrink-0 h-44"
-          onClick={onImageClick}
+          className={`flex-1 min-h-0 mx-3 mt-2 rounded-md overflow-hidden border cursor-pointer transition-all ${selRing("imageFrame")}`}
+          style={{ borderColor: cs.imageFrame }}
+          onClick={(e) => { e.stopPropagation(); onSelectPart?.("imageFrame"); onImageClick(); }}
           data-testid="preview-image-area"
         >
           {frontImageUrl ? (
             <img src={frontImageUrl} alt={formData.name} className="w-full h-full object-cover" />
           ) : (
             <div className="w-full h-full flex items-center justify-center bg-white/10 text-white/50 gap-2">
-              <ImagePlus className="w-4 h-4" />
+              <ImagePlus className="w-5 h-5" />
               <span style={{ fontSize: sizes.body }}>クリックして画像を選択</span>
             </div>
           )}
         </div>
 
-        <div className={`flex-1 mx-4 mt-3 ${footerVisible ? "mb-8" : "mb-2"} bg-black/40 rounded-md p-4 border border-white/10 backdrop-blur-md overflow-hidden`}>
-          <div className="h-full overflow-y-auto space-y-3">
-            <div>
-              <p className="opacity-50 uppercase font-['Orbitron'] mb-1" style={{ fontSize: sizes.label }}>アクション</p>
-              {editingField === "action" ? (
-                <textarea
-                  value={formData.action}
-                  onChange={(e) => updateField("action", e.target.value)}
-                  onBlur={() => setEditingField(null)}
-                  autoFocus
-                  className="w-full bg-transparent border border-white/30 rounded-md p-1 outline-none resize-none"
-                  style={{ color: textCol, fontFamily, fontSize: sizes.body }}
-                  rows={2}
-                  data-testid="inline-edit-action"
-                />
-              ) : (
-                <p
-                  onClick={() => setEditingField("action")}
-                  className="leading-relaxed opacity-90 cursor-text min-h-[1.5em]"
-                  style={{ fontFamily, color: textCol, fontSize: sizes.body }}
-                  title="クリックして編集"
-                  data-testid="preview-card-action"
-                >
-                  {formData.action || "クリックしてアクションを編集"}
-                </p>
-              )}
-            </div>
-            <div>
-              <p className="opacity-50 uppercase font-['Orbitron'] mb-1" style={{ fontSize: sizes.label }}>効果</p>
-              {editingField === "effect" ? (
-                <textarea
-                  value={formData.effect}
-                  onChange={(e) => updateField("effect", e.target.value)}
-                  onBlur={() => setEditingField(null)}
-                  autoFocus
-                  className="w-full bg-transparent border border-white/30 rounded-md p-1 outline-none resize-none"
-                  style={{ color: textCol, fontFamily, fontSize: sizes.body }}
-                  rows={2}
-                  data-testid="inline-edit-effect"
-                />
-              ) : (
-                <p
-                  onClick={() => setEditingField("effect")}
-                  className="leading-relaxed opacity-90 cursor-text min-h-[1.5em]"
-                  style={{ fontFamily, color: textCol, fontSize: sizes.body }}
-                  title="クリックして編集"
-                  data-testid="preview-card-effect"
-                >
-                  {formData.effect || "クリックして効果を編集"}
-                </p>
-              )}
-            </div>
+        {/* Tags — compact, shrink-0 */}
+        <div className="px-3 pt-1.5 pb-0.5 flex items-center gap-1 shrink-0 overflow-hidden">
+          <span
+            className="px-1.5 py-0.5 rounded text-[10px] whitespace-nowrap shrink-0 font-semibold"
+            style={{ backgroundColor: cs.accent + "40", color: cs.accent }}
+          >
+            {typeLabel}
+          </span>
+          {formData.playerCount && <span className="bg-white/10 opacity-80 px-1.5 py-0.5 rounded text-[10px] whitespace-nowrap shrink-0">{formData.playerCount}</span>}
+          {formData.difficulty && <span className="bg-white/10 opacity-60 px-1.5 py-0.5 rounded text-[10px] whitespace-nowrap shrink-0">{formData.difficulty === "easy" ? "かんたん" : formData.difficulty === "normal" ? "ふつう" : "むずかしい"}</span>}
+        </div>
+
+        {/* Content area — fixed max height, scrollable, click to edit */}
+        <div
+          className={`shrink-0 mx-3 mt-1 ${footerVisible ? "mb-8" : "mb-2"} max-h-[28%] bg-black/40 rounded-md p-2 border backdrop-blur-md overflow-y-auto space-y-1.5 cursor-pointer transition-all ${selRing("bodyText")}`}
+          style={{ borderColor: cs.imageFrame }}
+          onClick={(e) => { e.stopPropagation(); onSelectPart?.("bodyText"); }}
+        >
+          <div>
+            <p className="opacity-50 uppercase font-['Orbitron'] mb-0.5" style={{ fontSize: sizes.label }}>アクション</p>
+            {editingField === "action" ? (
+              <textarea
+                value={formData.action}
+                onChange={(e) => updateField("action", e.target.value)}
+                onBlur={() => setEditingField(null)}
+                autoFocus
+                className="w-full bg-transparent border border-white/30 rounded-md p-1 outline-none resize-none"
+                style={{ color: cs.bodyText, fontFamily, fontSize: sizes.body }}
+                rows={2}
+                data-testid="inline-edit-action"
+              />
+            ) : (
+              <p
+                onClick={(e) => { e.stopPropagation(); setEditingField("action"); }}
+                className="leading-relaxed opacity-90 cursor-text min-h-[1.2em]"
+                style={{ fontFamily, color: cs.bodyText, fontSize: sizes.body }}
+                title="クリックして編集"
+                data-testid="preview-card-action"
+              >
+                {formData.action || "クリックしてアクションを編集"}
+              </p>
+            )}
+          </div>
+          <div>
+            <p className="opacity-50 uppercase font-['Orbitron'] mb-0.5" style={{ fontSize: sizes.label }}>効果</p>
+            {editingField === "effect" ? (
+              <textarea
+                value={formData.effect}
+                onChange={(e) => updateField("effect", e.target.value)}
+                onBlur={() => setEditingField(null)}
+                autoFocus
+                className="w-full bg-transparent border border-white/30 rounded-md p-1 outline-none resize-none"
+                style={{ color: cs.bodyText, fontFamily, fontSize: sizes.body }}
+                rows={2}
+                data-testid="inline-edit-effect"
+              />
+            ) : (
+              <p
+                onClick={(e) => { e.stopPropagation(); setEditingField("effect"); }}
+                className="leading-relaxed opacity-90 cursor-text min-h-[1.2em]"
+                style={{ fontFamily, color: cs.bodyText, fontSize: sizes.body }}
+                title="クリックして編集"
+                data-testid="preview-card-effect"
+              >
+                {formData.effect || "クリックして効果を編集"}
+              </p>
+            )}
           </div>
         </div>
 
         {footerVisible && (
           <div
-            className="absolute bottom-0 w-full p-2 text-center text-[10px] font-['Orbitron'] uppercase tracking-[0.2em]"
+            className={`absolute bottom-0 w-full p-2 text-center text-[10px] font-['Orbitron'] uppercase tracking-[0.2em] cursor-pointer transition-all ${selRing("accent")}`}
             style={{
-              backgroundColor: footerBg || "rgba(0,0,0,0.6)",
-              color: footerText,
-              opacity: footerBg ? 1 : 0.4,
+              backgroundColor: footerBg || cs.accent + "33",
+              color: footerText || cs.accent,
             }}
+            onClick={(e) => { e.stopPropagation(); onSelectPart?.("accent"); }}
           >
             PARTY CARD
           </div>
@@ -1316,9 +1696,31 @@ function PCGCardEditor({ gameId, editCard, onBack }: {
   const [design, setDesign] = useState<PCGDesignSettings>(
     existingAttrs?.layout || defaultDesign
   );
+  const [activeTab, setActiveTab] = useState("content");
+  const [consultResult, setConsultResult] = useState<string | null>(null);
+  const consultMutation = usePCGConsult();
+  const [selectedPart, setSelectedPart] = useState<CardPart | null>(null);
 
   const updateField = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const updateCardStyle = (part: CardPart, value: string) => {
+    setDesign(prev => ({ ...prev, cardStyle: { ...(prev.cardStyle || {}), [part]: value } }));
+  };
+
+  const handleAIConsult = (promptType: "improve" | "shorten" | "penalty") => {
+    setConsultResult(null);
+    consultMutation.mutate({
+      name: formData.name || "名称未設定",
+      type: formData.type,
+      action: formData.action,
+      effect: formData.effect,
+      promptType,
+    }, {
+      onSuccess: (data) => setConsultResult(data.response),
+      onError: (err) => toast({ variant: "destructive", title: "AI相談失敗", description: err.message }),
+    });
   };
 
   const handleImageUpload = (side: "front" | "back") => (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1410,24 +1812,19 @@ function PCGCardEditor({ gameId, editCard, onBack }: {
           </Button>
           <Header size="sm" />
         </div>
-        <div className="flex gap-3 flex-wrap items-start">
+        <div className="flex gap-3 flex-wrap items-center">
           <Button variant="outline" onClick={onBack} data-testid="button-card-editor-cancel">
             キャンセル
           </Button>
-          <div className="flex flex-col items-end gap-1">
-            {!formData.name.trim() && !isPending && (
-              <p className="text-xs text-amber-400">カード名を入力してください</p>
-            )}
-            <Button
-              data-testid="button-save-card"
-              onClick={handleSave}
-              disabled={isPending || !formData.name.trim()}
-              className="bg-green-600 text-white border-green-700"
-            >
-              <Save className="w-5 h-5" />
-              {isPending ? "保存中..." : "保存して戻る"}
-            </Button>
-          </div>
+          <Button
+            data-testid="button-save-card"
+            onClick={handleSave}
+            disabled={isPending || !formData.name.trim()}
+            className="bg-green-600 text-white border-green-700"
+          >
+            <Save className="w-5 h-5" />
+            {isPending ? "保存中..." : "保存して戻る"}
+          </Button>
         </div>
       </header>
 
@@ -1451,10 +1848,13 @@ function PCGCardEditor({ gameId, editCard, onBack }: {
       <main className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         <div className="lg:col-span-4 space-y-4">
           <div className="bg-card/50 backdrop-blur-xl border border-white/5 rounded-md p-4 shadow-xl">
-            <Tabs defaultValue="content">
+            <Tabs value={activeTab} onValueChange={setActiveTab}>
               <TabsList className="w-full">
                 <TabsTrigger value="content" className="flex-1">コンテンツ</TabsTrigger>
                 <TabsTrigger value="design" className="flex-1">デザイン</TabsTrigger>
+                <TabsTrigger value="ai" className="flex-1 flex items-center gap-1">
+                  <Bot className="w-3 h-3" />AI相談
+                </TabsTrigger>
               </TabsList>
 
               <TabsContent value="content" className="space-y-4 pt-2">
@@ -1467,8 +1867,11 @@ function PCGCardEditor({ gameId, editCard, onBack }: {
                     value={formData.name}
                     onChange={(e) => updateField("name", e.target.value)}
                     placeholder="カード名を入力..."
-                    className="w-full bg-black/20 border border-border/50 rounded-md px-3 py-2 text-sm focus:border-amber-500/70 focus:outline-none transition-all placeholder:text-muted-foreground/50"
+                    className={`w-full bg-black/20 border ${!formData.name.trim() ? "border-destructive focus:border-destructive" : "border-border/50 focus:border-amber-500/70"} rounded-md px-3 py-2 text-sm focus:outline-none transition-all placeholder:text-muted-foreground/50`}
                   />
+                  {!formData.name.trim() && (
+                    <p className="text-xs text-destructive mt-1">カード名を入力してください</p>
+                  )}
                 </div>
 
                 <div className="space-y-2">
@@ -1542,6 +1945,44 @@ function PCGCardEditor({ gameId, editCard, onBack }: {
               </TabsContent>
 
               <TabsContent value="design" className="space-y-6 pt-2">
+
+                {/* Card color picker */}
+                <div className="space-y-3">
+                  <h3 className="text-sm font-['Orbitron'] flex items-center gap-2">
+                    <span className="w-1 h-4 bg-amber-500 rounded-full"></span>
+                    カード色 <span className="text-xs text-muted-foreground font-sans">(プレビューをクリックでも選択)</span>
+                  </h3>
+                  <div className="flex flex-wrap gap-1">
+                    {(Object.keys(cardPartLabels) as CardPart[]).map((part) => {
+                      const cs = getCardStyle(design);
+                      return (
+                        <button
+                          key={part}
+                          type="button"
+                          onClick={() => setSelectedPart(part)}
+                          className={clsx(
+                            "flex items-center gap-1.5 px-2 py-1 rounded text-xs transition-all border",
+                            selectedPart === part
+                              ? "border-amber-400 bg-amber-400/10 text-amber-400"
+                              : "border-border/40 text-muted-foreground hover:border-border hover:text-white"
+                          )}
+                          data-testid={`button-part-${part}`}
+                        >
+                          <span
+                            className="w-3 h-3 rounded-sm border border-white/20 shrink-0"
+                            style={{ backgroundColor: cs[part] }}
+                          />
+                          {cardPartLabels[part]}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <PCGColorEditorPanel
+                    selectedPart={selectedPart}
+                    cardStyle={getCardStyle(design)}
+                    onUpdate={updateCardStyle}
+                  />
+                </div>
 
                 <div className="space-y-4">
                   <h3 className="text-sm font-['Orbitron'] flex items-center gap-2">
@@ -1817,6 +2258,61 @@ function PCGCardEditor({ gameId, editCard, onBack }: {
                   </Button>
                 </div>
               </TabsContent>
+
+              <TabsContent value="ai" className="space-y-4 pt-2">
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  カードの内容を基にAIが提案します。
+                </p>
+                <div className="space-y-2">
+                  {([
+                    { key: "improve" as const, label: "改善案を出して" },
+                    { key: "shorten" as const, label: "効果文を短縮して" },
+                    { key: "penalty" as const, label: "面白いペナルティ案を3つ" },
+                  ]).map(({ key, label }) => (
+                    <Button
+                      key={key}
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleAIConsult(key)}
+                      disabled={consultMutation.isPending}
+                      className="w-full justify-start gap-2 text-sm"
+                      data-testid={`button-ai-consult-${key}`}
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                      {label}
+                    </Button>
+                  ))}
+                </div>
+
+                {consultMutation.isPending && (
+                  <div className="flex items-center gap-2 text-muted-foreground text-sm py-2">
+                    <Sparkles className="w-4 h-4 animate-pulse text-amber-400" />
+                    AI が考え中...
+                  </div>
+                )}
+
+                {consultResult && !consultMutation.isPending && (
+                  <div className="bg-black/20 border border-white/10 rounded-md p-3 space-y-2">
+                    <div className="flex justify-between items-center">
+                      <p className="text-xs font-['Orbitron'] text-amber-400">AI 提案</p>
+                      <button
+                        type="button"
+                        onClick={() => setConsultResult(null)}
+                        className="text-xs text-muted-foreground hover:text-white transition-colors"
+                      >
+                        ×
+                      </button>
+                    </div>
+                    <p className="text-sm leading-relaxed whitespace-pre-wrap text-muted-foreground">
+                      {consultResult}
+                    </p>
+                  </div>
+                )}
+
+                {consultMutation.isError && !consultMutation.isPending && (
+                  <p className="text-xs text-destructive">{consultMutation.error?.message}</p>
+                )}
+              </TabsContent>
             </Tabs>
           </div>
 
@@ -1878,6 +2374,9 @@ function PCGCardEditor({ gameId, editCard, onBack }: {
                 side={previewSide}
                 design={design}
                 onImageClick={handlePreviewImageClick}
+                onDesignClick={() => { setActiveTab("design"); }}
+                selectedPart={selectedPart}
+                onSelectPart={(part) => { setSelectedPart(part); setActiveTab("design"); }}
               />
               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-amber-500/15 blur-[80px] rounded-full -z-10 pointer-events-none"></div>
             </div>

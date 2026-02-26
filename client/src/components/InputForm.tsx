@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 interface InputFormProps {
   values: BalanceRequest;
   onChange: (values: BalanceRequest) => void;
+  nameError?: string;
 }
 
 const typeLabels: Record<string, string> = {
@@ -14,7 +15,7 @@ const typeLabels: Record<string, string> = {
   trap: "罠",
 };
 
-export function InputForm({ values, onChange }: InputFormProps) {
+export function InputForm({ values, onChange, nameError }: InputFormProps) {
   const handleChange = (field: keyof BalanceRequest, value: string | number) => {
     onChange({ ...values, [field]: value });
   };
@@ -30,8 +31,11 @@ export function InputForm({ values, onChange }: InputFormProps) {
           value={values.name}
           onChange={(e) => handleChange("name", e.target.value)}
           placeholder="カード名を入力..."
-          className="w-full bg-black/20 border-2 border-border/50 rounded-lg px-4 py-3 text-lg font-['Cinzel'] font-bold focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/10 transition-all placeholder:text-muted-foreground/50"
+          className={`w-full bg-black/20 border-2 ${nameError ? "border-destructive focus:border-destructive focus:ring-destructive/10" : "border-border/50 focus:border-primary focus:ring-primary/10"} rounded-lg px-4 py-3 text-lg font-['Cinzel'] font-bold focus:outline-none focus:ring-4 transition-all placeholder:text-muted-foreground/50`}
         />
+        {nameError && (
+          <p className="text-xs text-destructive mt-1">{nameError}</p>
+        )}
       </div>
 
       <div className="space-y-2">

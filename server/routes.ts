@@ -159,6 +159,67 @@ export async function registerRoutes(
     });
   });
 
+  app.post("/api/ai/pcg-consult", async (req, res) => {
+    try {
+      const { name, type, action, effect, promptType } = req.body as {
+        name: string;
+        type: string;
+        action: string;
+        effect: string;
+        promptType: string;
+      };
+
+      const mockResponses: Record<string, string> = {
+        improve: `【改善提案】\n1. カード名をより印象的にする — 「${name || "カード"}」に具体的な状況や感情を加えると記憶に残りやすくなります。\n2. アクションをシンプルに — プレイヤーが迷わないよう、アクションは1文で完結させましょう。\n3. 効果にサプライズ要素を追加 — 「予想外の展開」をルールに組み込むと盛り上がりが増します。`,
+        shorten: action
+          ? `【短縮版】\n${action.slice(0, 50)}${action.length > 50 ? "…" : ""}`
+          : "アクションを入力してから再度お試しください。",
+        penalty: `【ペナルティカードアイデア】\n1. 一言も喋れない！ / 次のターン終わりまで無言でプレイしなければならない\n2. 大声で発表 / 手札の中から1枚を全員に見せて読み上げる\n3. 席替え強制 / 左隣のプレイヤーと席を交換する`,
+      };
+
+      const apiKey = process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY;
+      const hasValidKey = apiKey && apiKey.length > 10 && !apiKey.startsWith("sk-ant-placeholder");
+
+      if (!hasValidKey) {
+        const mock = mockResponses[promptType];
+        if (!mock) return res.status(400).json({ message: "Invalid promptType" });
+        return res.json({ response: mock });
+      }
+
+      const prompts: Record<string, string> = {
+        improve: `パーティカードゲームのカードを改善してください。\nカード名: ${name}\nタイプ: ${type}\nアクション: ${action}\n効果: ${effect}\n\n改善提案を3点、日本語で簡潔に教えてください。`,
+        shorten: `次のパーティカードの効果テキストを、わかりやすく50文字以内に短縮してください。\n\nアクション: ${action}\n効果: ${effect}\n\n短縮版のみ出力してください。`,
+        penalty: `パーティカードゲームに合ったユニークで面白いペナルティカードのアイデアを3つ提案してください。\n現在のゲーム情報: カード名=${name} タイプ=${type}\n\n各提案は「カード名 / アクション内容」の形式で日本語で出力してください。`,
+      };
+
+      const prompt = prompts[promptType];
+      if (!prompt) {
+        return res.status(400).json({ message: "Invalid promptType" });
+      }
+
+      try {
+        const response = await anthropic.messages.create({
+          model: "claude-sonnet-4-5",
+          max_tokens: 1024,
+          messages: [{ role: "user", content: prompt }],
+        });
+
+        const contentBlock = response.content[0];
+        if (contentBlock.type !== "text") {
+          throw new Error("Unexpected response from AI");
+        }
+
+        res.json({ response: contentBlock.text });
+      } catch {
+        const mock = mockResponses[promptType];
+        res.json({ response: mock || "AI応答を取得できませんでした。" });
+      }
+    } catch (err) {
+      console.error("PCG AI Consult Error:", err);
+      res.status(500).json({ message: "AI API request failed" });
+    }
+  });
+
   app.post(api.balance.suggest.path, async (req, res) => {
     try {
       const { name, attack, hp, effect, type } = api.balance.suggest.input.parse(req.body);
