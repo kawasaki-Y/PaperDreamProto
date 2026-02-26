@@ -62,7 +62,15 @@ export async function registerRoutes(
   app.post("/api/games", async (req, res) => {
     try {
       const input = api.games.create.input.parse(req.body);
-      const game = await storage.createGame(input);
+      const title = input.title.trim();
+      if (!title) {
+        return res.status(400).json({ message: "ゲーム名を入力してください" });
+      }
+      const existing = await storage.getGameByTitle(title);
+      if (existing) {
+        return res.status(409).json({ error: "DUPLICATE_TITLE", existingGameId: existing.id, message: "同名のゲームが存在します" });
+      }
+      const game = await storage.createGame({ ...input, title });
       res.status(201).json(game);
     } catch (err) {
       if (err instanceof z.ZodError) {

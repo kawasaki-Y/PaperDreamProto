@@ -5,8 +5,9 @@ import { CardPreview } from "@/components/CardPreview";
 import { AIPanel } from "@/components/AIPanel";
 import {
   useBalanceCheck, useCreateGame, useCreateCard, useUpdateCard,
-  useGame, useGameCards, useDeleteCard, useUploadImage
+  useGame, useGameCards, useDeleteCard, useUploadImage, useGames, DuplicateTitleError
 } from "@/hooks/use-cards";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { type BalanceRequest, type BalanceResponse, type Card } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, Save, Swords, PartyPopper, Plus, Trash2, Pencil, Printer, ImagePlus, RotateCcw } from "lucide-react";
@@ -705,6 +706,21 @@ function PCGGameCreateForm({ onSubmit, onCancel }: {
 }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [duplicateDialog, setDuplicateDialog] = useState<{ open: boolean; existingGameId: number | null }>({ open: false, existingGameId: null });
+  const { data: games } = useGames();
+  const [, setLocation] = useLocation();
+
+  const trimmedTitle = title.trim();
+  const existingGame = trimmedTitle ? games?.find(g => g.title === trimmedTitle) : null;
+
+  const handleSubmit = () => {
+    if (!trimmedTitle) return;
+    if (existingGame) {
+      setDuplicateDialog({ open: true, existingGameId: existingGame.id });
+      return;
+    }
+    onSubmit(trimmedTitle, description);
+  };
 
   return (
     <div className="min-h-screen flex flex-col items-center p-6 relative overflow-x-hidden">
@@ -746,6 +762,12 @@ function PCGGameCreateForm({ onSubmit, onCancel }: {
                   placeholder="例: UNOっぽいゲーム"
                   className="w-full bg-black/20 border-2 border-border/50 rounded-md px-4 py-3 text-lg font-bold focus:border-amber-500 focus:outline-none focus:ring-4 focus:ring-amber-500/10 transition-all placeholder:text-muted-foreground/50"
                 />
+                {title.length > 0 && !trimmedTitle && (
+                  <p className="text-xs text-destructive" style={{ fontFamily: "'Rajdhani', sans-serif" }}>ゲーム名を入力してください</p>
+                )}
+                {existingGame && (
+                  <p className="text-xs text-amber-400" style={{ fontFamily: "'Rajdhani', sans-serif" }}>同名のゲームがあります</p>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -767,8 +789,8 @@ function PCGGameCreateForm({ onSubmit, onCancel }: {
                   キャンセル
                 </Button>
                 <Button
-                  onClick={() => onSubmit(title, description)}
-                  disabled={!title.trim()}
+                  onClick={handleSubmit}
+                  disabled={!trimmedTitle}
                   className="bg-amber-600 text-white border-amber-700"
                   data-testid="button-pcg-create-submit"
                 >
@@ -779,6 +801,42 @@ function PCGGameCreateForm({ onSubmit, onCancel }: {
           </UICard>
         </motion.div>
       </div>
+
+      <Dialog open={duplicateDialog.open} onOpenChange={(open) => setDuplicateDialog(d => ({ ...d, open }))}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle style={{ fontFamily: "'Orbitron', sans-serif" }}>同名のゲームがあります</DialogTitle>
+            <DialogDescription style={{ fontFamily: "'Rajdhani', sans-serif" }} className="text-base pt-1">
+              「{trimmedTitle}」はすでに存在します。どうしますか？
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex-col gap-2 sm:flex-col">
+            <Button
+              className="w-full"
+              onClick={() => setLocation(`/create/${duplicateDialog.existingGameId}`)}
+            >
+              既存を開く
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => {
+                setTitle(trimmedTitle + " (2)");
+                setDuplicateDialog({ open: false, existingGameId: null });
+              }}
+            >
+              別名で作る（「{trimmedTitle} (2)」を提案）
+            </Button>
+            <Button
+              variant="ghost"
+              className="w-full"
+              onClick={() => setDuplicateDialog({ open: false, existingGameId: null })}
+            >
+              キャンセル
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -1545,6 +1603,7 @@ export default function Creator() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const createGameMutation = useCreateGame();
+  const { data: allGames } = useGames();
 
   const existingGameId = params.id ? parseInt(params.id) : null;
   const { data: existingGame, isLoading: gameLoading } = useGame(existingGameId);
@@ -1552,6 +1611,7 @@ export default function Creator() {
   const [gameType, setGameType] = useState<GameType>(null);
   const [activeGameId, setActiveGameId] = useState<number | null>(null);
   const [pcgStep, setPcgStep] = useState<"create" | "manage">("create");
+  const [tcgDuplicateDialog, setTcgDuplicateDialog] = useState<{ open: boolean; existingGameId: number | null }>({ open: false, existingGameId: null });
 
   const resolvedGameId = activeGameId ?? existingGameId;
 
@@ -1565,6 +1625,12 @@ export default function Creator() {
       setPcgStep("create");
     } else {
       const title = "新しいTCGゲーム";
+      const existing = allGames?.find(g => g.title === title);
+      if (existing) {
+        setGameType(null);
+        setTcgDuplicateDialog({ open: true, existingGameId: existing.id });
+        return;
+      }
       createGameMutation.mutate({ title, description: "トレーディングカードゲーム" }, {
         onSuccess: (game) => {
           setActiveGameId(game.id);
@@ -1572,7 +1638,11 @@ export default function Creator() {
           toast({ title: "ゲームを作成しました", description: `「${game.title}」が作成されました。` });
         },
         onError: (error) => {
-          toast({ variant: "destructive", title: "ゲーム作成に失敗しました", description: error.message });
+          if (error instanceof DuplicateTitleError) {
+            setTcgDuplicateDialog({ open: true, existingGameId: error.existingGameId });
+          } else {
+            toast({ variant: "destructive", title: "ゲーム作成に失敗しました", description: error.message });
+          }
           setGameType(null);
         }
       });
@@ -1594,7 +1664,11 @@ export default function Creator() {
         toast({ title: "ゲームを作成しました", description: `「${game.title}」が作成されました。` });
       },
       onError: (error) => {
-        toast({ variant: "destructive", title: "ゲーム作成に失敗しました", description: error.message });
+        if (error instanceof DuplicateTitleError) {
+          toast({ variant: "destructive", title: "同名のゲームが存在します", description: "別のゲーム名を入力してください。" });
+        } else {
+          toast({ variant: "destructive", title: "ゲーム作成に失敗しました", description: error.message });
+        }
       }
     });
   };
@@ -1634,5 +1708,34 @@ export default function Creator() {
     );
   }
 
-  return <GameTypeSelector onSelect={handleSelectType} />;
+  return (
+    <>
+      <GameTypeSelector onSelect={handleSelectType} />
+      <Dialog open={tcgDuplicateDialog.open} onOpenChange={(open) => setTcgDuplicateDialog(d => ({ ...d, open }))}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle style={{ fontFamily: "'Orbitron', sans-serif" }}>同名のゲームがあります</DialogTitle>
+            <DialogDescription style={{ fontFamily: "'Rajdhani', sans-serif" }} className="text-base pt-1">
+              「新しいTCGゲーム」はすでに存在します。どうしますか？
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex-col gap-2 sm:flex-col">
+            <Button
+              className="w-full"
+              onClick={() => setLocation(`/create/${tcgDuplicateDialog.existingGameId}`)}
+            >
+              既存を開く
+            </Button>
+            <Button
+              variant="ghost"
+              className="w-full"
+              onClick={() => setTcgDuplicateDialog({ open: false, existingGameId: null })}
+            >
+              キャンセル
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
 }

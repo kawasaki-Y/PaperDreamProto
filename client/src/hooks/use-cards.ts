@@ -2,6 +2,15 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, buildUrl } from "@shared/routes";
 import { type BalanceRequest, type Game, type Card } from "@shared/schema";
 
+export class DuplicateTitleError extends Error {
+  existingGameId: number;
+  constructor(existingGameId: number) {
+    super("DUPLICATE_TITLE");
+    this.name = "DuplicateTitleError";
+    this.existingGameId = existingGameId;
+  }
+}
+
 export function useGames() {
   return useQuery<Game[]>({
     queryKey: ["/api/games"],
@@ -49,6 +58,9 @@ export function useCreateGame() {
       });
       if (!res.ok) {
         const error = await res.json();
+        if (res.status === 409 && error.error === "DUPLICATE_TITLE") {
+          throw new DuplicateTitleError(error.existingGameId);
+        }
         throw new Error(error.message || "Failed to create game");
       }
       return res.json() as Promise<Game>;
