@@ -27,8 +27,8 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        {/* ThemeSwitcher — 全画面固定 left-top */}
-        <div className="fixed top-4 left-4 z-50">
+        {/* ThemeSwitcher — 全画面固定 left-bottom, 印刷時非表示 */}
+        <div className="fixed bottom-6 left-6 z-50 print:hidden">
           <ThemeSwitcher />
         </div>
         <Router />

@@ -4,6 +4,13 @@ import { type PCGFormData } from "@/components/PCGInputForm";
 import { clsx } from "clsx";
 import { AIPanel } from "@/components/AIPanel";
 import {
+  type CardPart, type CardStyle, type PCGHeaderSettings, type PCGFooterSettings,
+  type PCGDesignSettings,
+  defaultCardStyle, defaultHeaderSettings, defaultFooterSettings, defaultDesign,
+  cardPartLabels, swatchPresets, fontOptions,
+  getCardStyle, getTextSizes, getBorderRadius, getResolvedFont,
+} from "@/lib/pcgCardStyle";
+import {
   useBalanceCheck, useCreateGame, useCreateCard, useUpdateCard,
   useGame, useGameCards, useDeleteCard, useUploadImage, useGames, DuplicateTitleError,
   usePCGConsult,
@@ -569,71 +576,6 @@ interface PCGAttributes {
   difficulty: string;
 }
 
-interface PCGHeaderSettings {
-  backgroundColor: string;
-  textColor: string;
-  borderRadius: "none" | "small" | "medium" | "large";
-}
-
-interface PCGFooterSettings {
-  backgroundColor: string;
-  textColor: string;
-  visible: boolean;
-}
-
-type CardPart = "background" | "border" | "titleBg" | "titleText" | "bodyText" | "accent" | "imageFrame";
-
-interface CardStyle {
-  background: string;
-  border: string;
-  titleBg: string;
-  titleText: string;
-  bodyText: string;
-  accent: string;
-  imageFrame: string;
-}
-
-interface PCGDesignSettings {
-  textSize: "xs" | "small" | "medium" | "large";
-  backgroundColor: string;
-  fontFamily: string;
-  textColor: string;
-  header?: PCGHeaderSettings;
-  footer?: PCGFooterSettings;
-  cardStyle?: Partial<CardStyle>;
-}
-
-const defaultHeaderSettings: PCGHeaderSettings = {
-  backgroundColor: "",
-  textColor: "",
-  borderRadius: "none",
-};
-
-const defaultFooterSettings: PCGFooterSettings = {
-  backgroundColor: "",
-  textColor: "",
-  visible: true,
-};
-
-const defaultDesign: PCGDesignSettings = {
-  textSize: "medium",
-  backgroundColor: "#1e3a5f",
-  fontFamily: "gothic",
-  textColor: "#ffffff",
-  header: { ...defaultHeaderSettings },
-  footer: { ...defaultFooterSettings },
-};
-
-const getBorderRadius = (size: string) => {
-  const map: Record<string, string> = {
-    none: "0",
-    small: "4px",
-    medium: "8px",
-    large: "16px",
-  };
-  return map[size] || "0";
-};
-
 const bgColorPresets = [
   { value: "#ffffff", label: "白" },
   { value: "#000000", label: "黒" },
@@ -652,30 +594,6 @@ const textColorPresets = [
   { value: "#60a5fa", label: "水" },
   { value: "#f87171", label: "赤" },
 ];
-
-const fontOptions = [
-  { value: "gothic", label: "ゴシック体", family: "'Rajdhani', sans-serif" },
-  { value: "mincho", label: "明朝体", family: "'Libre Baskerville', 'Playfair Display', serif" },
-  { value: "rounded", label: "丸ゴシック", family: "'DM Sans', sans-serif" },
-  { value: "handwriting", label: "手書き風", family: "'Architects Daughter', cursive" },
-  { value: "cinzel", label: "クラシック", family: "'Cinzel', serif" },
-  { value: "orbitron", label: "サイバー", family: "'Orbitron', sans-serif" },
-];
-
-const getTextSizes = (size: string) => {
-  const sizeMap: Record<string, { title: string; body: string; label: string }> = {
-    xs: { title: "14px", body: "10px", label: "8px" },
-    small: { title: "16px", body: "12px", label: "9px" },
-    medium: { title: "20px", body: "14px", label: "10px" },
-    large: { title: "24px", body: "16px", label: "11px" },
-  };
-  return sizeMap[size] || sizeMap.medium;
-};
-
-const getResolvedFont = (family: string) => {
-  const found = fontOptions.find(f => f.value === family);
-  return found?.family || "'Rajdhani', sans-serif";
-};
 
 function PCGCardPreviewFull({
   name, action, effect, type, playerCount, difficulty, frontImageUrl, backImageUrl, side, design
@@ -778,47 +696,6 @@ function PCGCardPreviewFull({
       </div>
     </div>
   );
-}
-
-const defaultCardStyle: CardStyle = {
-  background: "#1e3a5f",
-  border: "#4a6fa5",
-  titleBg: "rgba(0,0,0,0.3)",
-  titleText: "#ffffff",
-  bodyText: "#ffffff",
-  accent: "#f59e0b",
-  imageFrame: "rgba(255,255,255,0.1)",
-};
-
-const cardPartLabels: Record<CardPart, string> = {
-  background: "背景",
-  border: "枠線",
-  titleBg: "タイトル背景",
-  titleText: "タイトル文字",
-  bodyText: "本文文字",
-  accent: "アクセント",
-  imageFrame: "画像枠",
-};
-
-const swatchPresets: Record<CardPart, string[]> = {
-  background: ["#1e3a5f", "#0f172a", "#1c1c1c", "#2d1b4e", "#1a3a2a", "#3b1a1a"],
-  border: ["#4a6fa5", "#6366f1", "#f59e0b", "#10b981", "#ef4444", "#8b5cf6"],
-  titleBg: ["rgba(0,0,0,0.3)", "rgba(0,0,0,0.6)", "rgba(255,255,255,0.1)", "rgba(245,158,11,0.3)"],
-  titleText: ["#ffffff", "#fbbf24", "#60a5fa", "#34d399", "#f87171"],
-  bodyText: ["#ffffff", "#e2e8f0", "#fbbf24", "#94a3b8", "#d1d5db"],
-  accent: ["#f59e0b", "#6366f1", "#10b981", "#ef4444", "#8b5cf6", "#ec4899"],
-  imageFrame: ["rgba(255,255,255,0.1)", "rgba(255,255,255,0.3)", "rgba(0,0,0,0.3)", "rgba(245,158,11,0.4)"],
-};
-
-function getCardStyle(design: PCGDesignSettings): CardStyle {
-  return {
-    ...defaultCardStyle,
-    background: design.backgroundColor || defaultCardStyle.background,
-    bodyText: design.textColor || defaultCardStyle.bodyText,
-    titleText: design.header?.textColor || design.textColor || defaultCardStyle.titleText,
-    titleBg: design.header?.backgroundColor || defaultCardStyle.titleBg,
-    ...(design.cardStyle || {}),
-  };
 }
 
 function PCGColorEditorPanel({
