@@ -5,26 +5,23 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useGames, useDeleteGame } from "@/hooks/use-cards";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
 const menuItems = [
   {
     title: "創作",
     subtitle: "Deckbuilding",
-    description: "カードを作って保存（MVP）",
+    description: "カードの作成、評価、改善",
     icon: Pen,
     href: "/create",
     color: "from-violet-600 to-purple-800",
-    status: "mvp" as const,
   },
   {
-    title: "印刷",
-    subtitle: "Print Preview",
-    description: "アップロードして両面印刷（MVP）",
+    title: "出力",
+    subtitle: "Visual Preview",
+    description: "印刷データの生成とプレビュー",
     icon: Printer,
     href: "/preview",
     color: "from-cyan-600 to-teal-800",
-    status: "mvp" as const,
   },
   {
     title: "配信",
@@ -33,7 +30,6 @@ const menuItems = [
     icon: Send,
     href: "/distribute",
     color: "from-amber-600 to-orange-800",
-    status: "soon" as const,
   },
 ];
 
@@ -41,7 +37,6 @@ export default function Home() {
   const { data: games } = useGames();
   const deleteGameMutation = useDeleteGame();
   const [isCollectionOpen, setIsCollectionOpen] = useState(false);
-  const [soonModalOpen, setSoonModalOpen] = useState(false);
 
   const handleDelete = (e: React.MouseEvent, gameId: number) => {
     e.preventDefault();
@@ -75,22 +70,6 @@ export default function Home() {
           <p className="text-muted-foreground text-lg" style={{ fontFamily: "'Rajdhani', sans-serif" }}>
             創作と変革の旅に出よう
           </p>
-          {/* デモ導線ステップ */}
-          <div className="flex items-center justify-center gap-2 pt-1">
-            <span
-              className="text-xs font-bold text-primary px-3 py-1 rounded-full border border-primary/30 bg-primary/10"
-              style={{ fontFamily: "'Orbitron', sans-serif" }}
-            >
-              ① 創作
-            </span>
-            <ArrowRight className="w-3 h-3 text-muted-foreground" />
-            <span
-              className="text-xs font-bold text-cyan-500 px-3 py-1 rounded-full border border-cyan-500/30 bg-cyan-500/10"
-              style={{ fontFamily: "'Orbitron', sans-serif" }}
-            >
-              ② 印刷
-            </span>
-          </div>
         </motion.div>
 
         <motion.div
@@ -102,19 +81,9 @@ export default function Home() {
           {menuItems.map((item, i) => {
             const Icon = item.icon;
             const cardContent = (
-              <Card className="hover-elevate active-elevate-2 cursor-pointer h-full overflow-visible relative">
-                {item.status === "soon" && (
-                  <span
-                    className="absolute top-3 right-3 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-500 border border-amber-500/30 z-10"
-                    style={{ fontFamily: "'Orbitron', sans-serif" }}
-                  >
-                    近日
-                  </span>
-                )}
+              <Card className="hover-elevate active-elevate-2 cursor-pointer h-full overflow-visible">
                 <CardContent className="p-8 flex flex-col items-center text-center gap-4">
-                  <div
-                    className={`w-16 h-16 rounded-md bg-gradient-to-br ${item.color} flex items-center justify-center shadow-lg${item.status === "soon" ? " opacity-60" : ""}`}
-                  >
+                  <div className={`w-16 h-16 rounded-md bg-gradient-to-br ${item.color} flex items-center justify-center shadow-lg`}>
                     <Icon className="w-8 h-8 text-white" />
                   </div>
                   <div>
@@ -137,25 +106,25 @@ export default function Home() {
                 </CardContent>
               </Card>
             );
-
-            if (item.status === "soon") {
+            if (i === 1) {
               return (
-                <button
+                <a
                   key={i}
-                  data-testid={`button-menu-${item.subtitle.toLowerCase().replace(/\s+/g, "-")}`}
-                  className="text-left w-full h-full"
-                  onClick={() => setSoonModalOpen(true)}
+                  href="https://epson-api.vercel.app/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block"
+                  data-testid={`link-menu-${item.subtitle.toLowerCase().replace(/\s+/g, '-')}`}
                 >
                   {cardContent}
-                </button>
+                </a>
               );
             }
-
             return (
               <Link
                 key={i}
                 href={item.href}
-                data-testid={`link-menu-${item.subtitle.toLowerCase().replace(/\s+/g, "-")}`}
+                data-testid={`link-menu-${item.subtitle.toLowerCase().replace(/\s+/g, '-')}`}
               >
                 {cardContent}
               </Link>
@@ -184,7 +153,7 @@ export default function Home() {
                     MY COLLECTION
                   </h2>
                   <p className="text-sm text-muted-foreground" style={{ fontFamily: "'Rajdhani', sans-serif" }}>
-                    この端末に保存（ゲスト）／ログインで同期（近日）
+                    保存済みのカードゲームを編集できます
                   </p>
                 </div>
                 <Button variant="ghost" size="sm" data-testid="button-collection-chevron">
@@ -277,21 +246,6 @@ export default function Home() {
           </Card>
         </motion.div>
       </div>
-
-      {/* 配信 準備中モーダル */}
-      <Dialog open={soonModalOpen} onOpenChange={setSoonModalOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle style={{ fontFamily: "'Orbitron', sans-serif" }}>
-              配信 — 近日公開
-            </DialogTitle>
-            <DialogDescription style={{ fontFamily: "'Rajdhani', sans-serif" }} className="text-base pt-1">
-              配信機能は現在準備中です。<br />
-              デモでは <strong>創作 → 印刷</strong> の流れをご覧ください。
-            </DialogDescription>
-          </DialogHeader>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
